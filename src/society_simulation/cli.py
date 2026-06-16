@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from typing import Sequence
 
 from society_simulation.config import load_config
@@ -21,8 +22,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command != "run":
         return 1
 
-    config = load_config(args.config)
-    result = run_experiment(config)
+    try:
+        config = load_config(args.config)
+        result = run_experiment(config)
+    except OSError as exc:
+        parser.error(f"Unable to read config file '{args.config}': {exc}")
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        parser.error(f"Invalid config file '{args.config}': {exc}")
     metrics = result.metrics
 
     print(f"experiment={config.experiment_name}")

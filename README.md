@@ -10,6 +10,8 @@ source .venv/bin/activate
 python -m pip install -e ".[dev]"
 ```
 
+Python 3.11+ is required.
+
 ## Run
 
 ```bash
