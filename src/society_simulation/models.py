@@ -18,7 +18,7 @@ class AgentProfile:
 class Observation:
     agent_id: int
     private_signal: Action
-    observed_actions: list[Action]
+    observed_actions: tuple[Action, ...]
 
 
 @dataclass(frozen=True)
@@ -36,7 +36,7 @@ class AgentState:
     confidence: float
     action: Action
     step_index: int
-    observed_actions: list[Action]
+    observed_actions: tuple[Action, ...]
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)

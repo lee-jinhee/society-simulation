@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 
 from society_simulation.models import Action, AgentState, Observation
 
@@ -20,10 +20,10 @@ class PreviousActionsObservation:
         self,
         agent_id: int,
         private_signal: Action,
-        prior_states: list[AgentState],
+        prior_states: Sequence[AgentState],
     ) -> Observation:
         return Observation(
             agent_id=agent_id,
             private_signal=private_signal,
-            observed_actions=[state.action for state in prior_states],
+            observed_actions=tuple(state.action for state in prior_states),
         )
