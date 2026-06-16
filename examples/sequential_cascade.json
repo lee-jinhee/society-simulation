@@ -1,0 +1,12 @@
+{
+  "experiment_name": "sequential_information_cascade",
+  "seed": 42,
+  "num_agents": 10,
+  "true_state": null,
+  "signal_accuracy": 0.7,
+  "prior_probability": 0.5,
+  "scheduler": "sequential",
+  "observation_policy": "previous_actions",
+  "update_policy": "bayesian_cascade",
+  "output_dir": "runs/sequential_cascade"
+}
