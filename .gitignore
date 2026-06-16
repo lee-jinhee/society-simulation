@@ -8,10 +8,10 @@ Thumbs.db
 *.swp
 
 # Runtime and build artifacts
+.worktrees/
 node_modules/
 dist/
 build/
 coverage/
 .env
 .env.*
-
