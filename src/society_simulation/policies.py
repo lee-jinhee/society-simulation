@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from functools import lru_cache
-
 from society_simulation.models import Action, Decision, Observation
 
 
@@ -47,8 +45,19 @@ class BayesianCascadePolicy:
         observed_actions: tuple[Action, ...],
         private_signal: Action,
     ) -> float:
-        likelihood_history_a = self._history_likelihood(observed_actions, "A")
-        likelihood_history_b = self._history_likelihood(observed_actions, "B")
+        likelihood_history_a, likelihood_history_b = self._history_likelihoods(observed_actions)
+        return self._posterior_from_likelihoods(
+            likelihood_history_a,
+            likelihood_history_b,
+            private_signal,
+        )
+
+    def _posterior_from_likelihoods(
+        self,
+        likelihood_history_a: float,
+        likelihood_history_b: float,
+        private_signal: Action,
+    ) -> float:
         likelihood_signal_a = _signal_probability(private_signal, "A", self.signal_accuracy)
         likelihood_signal_b = _signal_probability(private_signal, "B", self.signal_accuracy)
 
@@ -62,33 +71,48 @@ class BayesianCascadePolicy:
             denominator = numerator + ((1.0 - self.prior_probability) * likelihood_signal_b)
         return numerator / denominator
 
-    @lru_cache(maxsize=None)
-    def _history_likelihood(self, observed_actions: tuple[Action, ...], true_state: Action) -> float:
-        if not observed_actions:
-            return 1.0
+    def _history_likelihoods(self, observed_actions: tuple[Action, ...]) -> tuple[float, float]:
+        likelihood_history_a = 1.0
+        likelihood_history_b = 1.0
 
-        prefix = observed_actions[:-1]
-        final_action = observed_actions[-1]
-        prefix_likelihood = self._history_likelihood(prefix, true_state)
+        for public_action in observed_actions:
+            matching_probability_a = 0.0
+            matching_probability_b = 0.0
 
-        matching_signal_probability = 0.0
-        for private_signal in ("A", "B"):
-            predicted = self._action_for_public_history(prefix, private_signal)
-            if predicted == final_action:
-                matching_signal_probability += _signal_probability(
+            for private_signal in ("A", "B"):
+                predicted = self._action_from_likelihoods(
+                    likelihood_history_a,
+                    likelihood_history_b,
                     private_signal,
-                    true_state,
-                    self.signal_accuracy,
                 )
+                if predicted == public_action:
+                    matching_probability_a += _signal_probability(
+                        private_signal,
+                        "A",
+                        self.signal_accuracy,
+                    )
+                    matching_probability_b += _signal_probability(
+                        private_signal,
+                        "B",
+                        self.signal_accuracy,
+                    )
 
-        return prefix_likelihood * matching_signal_probability
+            likelihood_history_a *= matching_probability_a
+            likelihood_history_b *= matching_probability_b
 
-    def _action_for_public_history(
+        return likelihood_history_a, likelihood_history_b
+
+    def _action_from_likelihoods(
         self,
-        observed_actions: tuple[Action, ...],
+        likelihood_history_a: float,
+        likelihood_history_b: float,
         private_signal: Action,
     ) -> Action:
-        belief = self._posterior_probability(observed_actions, private_signal)
+        belief = self._posterior_from_likelihoods(
+            likelihood_history_a,
+            likelihood_history_b,
+            private_signal,
+        )
         return "A" if belief >= 0.5 else "B"
 
 
