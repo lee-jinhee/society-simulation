@@ -66,7 +66,7 @@ def test_run_experiment_samples_true_state_when_config_is_none(tmp_path: Path) -
 
     result = run_experiment(config)
 
-    assert result.true_state in ("A", "B")
+    assert result.true_state == "B"
     assert_replay_matches_result(config, result)
 
 
@@ -85,6 +85,15 @@ def test_run_experiment_supports_simple_heuristic_policy(tmp_path: Path) -> None
     result = run_experiment(config)
 
     assert result.true_state == "A"
+    assert tuple(state.action for state in result.states) == ("A", "B", "A", "B", "B", "A")
+    assert tuple(state.belief_probability for state in result.states) == (
+        1.0,
+        0.5,
+        2 / 3,
+        0.5,
+        0.4,
+        0.5,
+    )
     assert_replay_matches_result(config, result)
 
 
