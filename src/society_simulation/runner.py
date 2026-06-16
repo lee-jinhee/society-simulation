@@ -17,7 +17,7 @@ from society_simulation.signals import BinarySignalModel
 @dataclass(frozen=True)
 class RunResult:
     true_state: Action
-    states: list[AgentState]
+    states: tuple[AgentState, ...]
     metrics: dict[str, Any]
     output_dir: Path
 
@@ -69,7 +69,7 @@ def run_experiment(config: ExperimentConfig) -> RunResult:
     )
     return RunResult(
         true_state=true_state,
-        states=states,
+        states=tuple(states),
         metrics=metrics,
         output_dir=output_dir,
     )
