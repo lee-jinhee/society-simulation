@@ -2,6 +2,8 @@
 
 Date: 2026-06-16
 
+Status note: this report reflects the earlier behavioral-economics framing. After subsequent scoping, the project direction moved toward crowd psychology, information cascades, and network herding. For the current architecture recommendation, see `docs/research/2026-06-16-network-herding-prior-art.md`.
+
 ## Purpose
 
 This report summarizes how the cited projects construct agents, populations, interactions, and validation loops. The goal is to inform the first milestone of this repository:
