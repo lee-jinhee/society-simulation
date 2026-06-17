@@ -188,6 +188,36 @@ def test_network_replay_writer_rejects_mismatched_timeseries_round_index(
     assert not (tmp_path / "network-run").exists()
 
 
+def test_network_replay_writer_rejects_mixed_round_indices(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    graph = Graph({0: (1,), 1: (0,)}, topology={"type": "complete"})
+    rounds = (
+        (
+            state(0, "A", 1.0, 0),
+            state(1, "B", 0.0, 1),
+        ),
+        (
+            state(0, "B", 0.0, 1),
+            state(1, "A", 1.0, 1),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="round 0 states must share the same round_index"):
+        NetworkReplayWriter(config).write(
+            graph=graph,
+            rounds=rounds,
+            timeseries=[{"round_index": 0}, {"round_index": 1}],
+            metrics={
+                "final_action_counts": {"A": 1, "B": 1},
+                "consensus_reached": False,
+                "consensus_action": None,
+                "edge_disagreement_rate": 1.0,
+            },
+        )
+
+    assert not (tmp_path / "network-run").exists()
+
+
 def test_network_replay_writer_rejects_missing_metric_key(tmp_path: Path) -> None:
     config = make_config(tmp_path)
     graph = Graph({0: (1,), 1: (0,)}, topology={"type": "complete"})

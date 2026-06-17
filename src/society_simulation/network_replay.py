@@ -48,6 +48,9 @@ class NetworkReplayWriter:
         for round_index, states in enumerate(rounds):
             if not states:
                 raise ValueError("rounds must not contain empty rounds")
+            expected_round_index = states[0].round_index
+            if any(state.round_index != expected_round_index for state in states):
+                raise ValueError(f"round {round_index} states must share the same round_index")
             state_ids = [state.agent_id for state in states]
             if len(state_ids) != len(set(state_ids)) or set(state_ids) != graph_node_ids:
                 raise ValueError(f"round {round_index} must contain one state per graph node")
