@@ -20,6 +20,7 @@ class NetworkReplayWriter:
         timeseries: list[dict[str, Any]],
         metrics: dict[str, Any],
     ) -> Path:
+        self._validate_replay_bundle(graph, rounds, timeseries, metrics)
         output_dir = Path(self.config.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         self._write_json(output_dir / "config.json", self.config.to_dict())
@@ -32,6 +33,44 @@ class NetworkReplayWriter:
 
     def _write_json(self, path: Path, payload: dict[str, Any]) -> None:
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    def _validate_replay_bundle(
+        self,
+        graph: Graph,
+        rounds: tuple[tuple[NetworkAgentState, ...], ...],
+        timeseries: list[dict[str, Any]],
+        metrics: dict[str, Any],
+    ) -> None:
+        if not rounds:
+            raise ValueError("rounds must not be empty")
+
+        graph_node_ids = set(graph.adjacency)
+        for round_index, states in enumerate(rounds):
+            if not states:
+                raise ValueError("rounds must not contain empty rounds")
+            state_ids = [state.agent_id for state in states]
+            if len(state_ids) != len(set(state_ids)) or set(state_ids) != graph_node_ids:
+                raise ValueError(f"round {round_index} must contain one state per graph node")
+
+        if len(timeseries) != len(rounds):
+            raise ValueError("timeseries must contain one row per round")
+        for index, (row, states) in enumerate(zip(timeseries, rounds)):
+            if "round_index" not in row:
+                raise ValueError(f"timeseries row {index} must include round_index")
+            expected_round_index = states[0].round_index
+            if row["round_index"] != expected_round_index:
+                raise ValueError(
+                    f"timeseries row {index} must have round_index {expected_round_index}"
+                )
+
+        for key in (
+            "final_action_counts",
+            "consensus_reached",
+            "consensus_action",
+            "edge_disagreement_rate",
+        ):
+            if key not in metrics:
+                raise ValueError(f"metrics is missing required key: {key}")
 
     def _write_steps(
         self,
