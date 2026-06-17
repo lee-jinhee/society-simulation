@@ -79,6 +79,13 @@ def test_graph_adjacency_is_immutable() -> None:
         graph.adjacency[0] = ()
 
 
+def test_graph_topology_is_immutable() -> None:
+    graph = build_graph(TopologyConfig(type="complete"), num_agents=3, rng=random.Random(1))
+
+    with pytest.raises(TypeError):
+        graph.topology["type"] = "mutated"
+
+
 def test_to_dict_returns_defensive_copy() -> None:
     graph = Graph({0: (), 1: ()})
     first = graph.to_dict()
@@ -88,6 +95,14 @@ def test_to_dict_returns_defensive_copy() -> None:
     second = graph.to_dict()
     assert second["topology"] == {}
     assert second["adjacency"]["0"] == []
+
+
+def test_to_dict_returns_topology_copy() -> None:
+    graph = Graph({0: (), 1: ()})
+    first = graph.to_dict()
+    first["topology"]["type"] = "mutated"
+
+    assert graph.to_dict()["topology"] == {}
 
 
 def test_build_graph_rejects_invalid_erdos_renyi_probability() -> None:
@@ -128,6 +143,13 @@ def test_graph_to_dict_topology_omits_none_and_defaults_to_empty() -> None:
 
     explicit_none = Graph({0: ()}).to_dict()
     assert explicit_none["topology"] == {}
+
+
+def test_build_graph_rejects_non_positive_num_agents() -> None:
+    with pytest.raises(ValueError, match="num_agents must be positive"):
+        build_graph(TopologyConfig(type="complete"), 0, random.Random(1))
+    with pytest.raises(ValueError, match="num_agents must be positive"):
+        build_graph(TopologyConfig(type="erdos_renyi", edge_probability=0.5), -1, random.Random(1))
 
 
 def test_small_world_graph_preserves_degree_and_edge_count_when_p_is_zero() -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import asdict, dataclass
+from collections.abc import Mapping
 from types import MappingProxyType
 
 from society_simulation.config import TopologyConfig
@@ -10,7 +11,7 @@ from society_simulation.config import TopologyConfig
 @dataclass(frozen=True)
 class Graph:
     adjacency: dict[int, tuple[int, ...]]
-    topology: dict[str, object] | None = None
+    topology: Mapping[str, object] | None = None
 
     def __post_init__(self) -> None:
         normalized = {}
@@ -44,6 +45,9 @@ class Graph:
                     raise ValueError("graph references missing nodes")
                 if node not in self.adjacency[neighbor]:
                     raise ValueError("graph edges must be undirected")
+
+        topology = {} if self.topology is None else dict(self.topology)
+        object.__setattr__(self, "topology", MappingProxyType(topology))
 
     def neighbors(self, node: int) -> tuple[int, ...]:
         return self.adjacency[node]
@@ -145,6 +149,8 @@ def build_graph(
     num_agents: int,
     rng: random.Random,
 ) -> Graph:
+    if num_agents <= 0:
+        raise ValueError("num_agents must be positive")
     config.validate(num_agents)
 
     if config.type == "complete":
