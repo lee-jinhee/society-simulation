@@ -1,7 +1,11 @@
 import pytest
 
 from society_simulation.graph import Graph
-from society_simulation.network_metrics import compute_final_network_metrics, compute_round_metrics
+from society_simulation.network_metrics import (
+    compute_final_network_metrics,
+    compute_round_metrics,
+    edge_disagreement_rate,
+)
 from society_simulation.network_models import NetworkAgentState
 
 
@@ -97,6 +101,16 @@ def test_round_metrics_rejects_previous_state_id_mismatch() -> None:
 
     with pytest.raises(ValueError, match="previous_states must contain one state per graph node"):
         compute_round_metrics(graph, current, previous)
+
+
+def test_edge_disagreement_rate_rejects_malformed_snapshot_on_edgeless_graph() -> None:
+    graph = Graph({0: (), 1: ()})
+    states = (
+        state(0, "A", 0.8, 0),
+    )
+
+    with pytest.raises(ValueError, match="states must contain one state per graph node"):
+        edge_disagreement_rate(graph, states)
 
 
 def test_final_metrics_detect_consensus_time() -> None:

@@ -78,11 +78,12 @@ def compute_final_network_metrics(
 
 
 def edge_disagreement_rate(graph: Graph, states: tuple[NetworkAgentState, ...]) -> float:
+    _validate_state_snapshot(graph, states, _STATE_SNAPSHOT_ERROR)
     edges = graph.edges()
     if not edges:
         return 0.0
 
-    action_by_id = _validate_state_snapshot(graph, states, _STATE_SNAPSHOT_ERROR)
+    action_by_id = {state.agent_id: state for state in states}
     disagreements = sum(
         1
         for source, target in edges
