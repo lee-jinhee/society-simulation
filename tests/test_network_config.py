@@ -46,6 +46,7 @@ def test_load_network_herding_config(tmp_path: Path) -> None:
         (("initial_opinion", "type"), "fixed", "unsupported initial_opinion type"),
         (("topology", "type"), "scale_free", "unsupported topology type"),
         (("topology", "degree"), 3, "small_world degree must be a positive even integer"),
+        (("topology", "degree"), 2.0, "small_world degree must be a positive even integer"),
         (("topology", "degree"), 12, "small_world degree must be less than num_agents"),
         (("topology", "rewiring_probability"), 1.2, "rewiring_probability must be between 0 and 1"),
         (("scheduler", "rounds"), 0, "rounds must be positive"),

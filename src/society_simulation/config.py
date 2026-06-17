@@ -132,6 +132,8 @@ class TopologyConfig:
         if self.type == "small_world":
             if self.degree is None:
                 raise ValueError("small_world degree must be a positive even integer")
+            if isinstance(self.degree, bool) or not isinstance(self.degree, int):
+                raise ValueError("small_world degree must be a positive even integer")
             if self.degree <= 0 or self.degree % 2 != 0:
                 raise ValueError("small_world degree must be a positive even integer")
             if self.degree >= num_agents:
