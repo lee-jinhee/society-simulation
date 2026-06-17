@@ -89,29 +89,29 @@ def test_network_replay_writer_writes_all_artifacts(tmp_path: Path) -> None:
     [
         ((), "rounds must not be empty"),
         (((),), "rounds must not contain empty rounds"),
+        (
             (
-                (
-                    (state(0, "A", 1.0, 0),),
-                    (state(0, "B", 0.0, 1), state(0, "A", 1.0, 1)),
-                ),
-                "round 0 must contain one state per graph node",
+                (state(0, "A", 1.0, 0),),
+                (state(0, "B", 0.0, 1), state(0, "A", 1.0, 1)),
             ),
+            "round 0 must contain one state per graph node",
+        ),
         (
             (
                 (state(0, "A", 1.0, 0), state(1, "B", 0.0, 0), state(2, "A", 1.0, 0)),
                 (state(0, "B", 0.0, 1), state(1, "A", 1.0, 1)),
             ),
             "round 0 must contain one state per graph node",
-    ),
-    (
+        ),
         (
             (
-                state(0, "A", 1.0, 0),
-                state(0, "B", 1.0, 0),
+                (
+                    state(0, "A", 1.0, 0),
+                    state(0, "B", 1.0, 0),
+                ),
             ),
+            "round 0 must contain one state per graph node",
         ),
-        "round 0 must contain one state per graph node",
-    ),
     ],
 )
 def test_network_replay_writer_rejects_invalid_rounds(
