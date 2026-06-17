@@ -8,6 +8,14 @@ from society_simulation.config import load_config
 from society_simulation.runner import run_experiment
 
 
+def _require_action_counts(metrics: dict[str, object]) -> object:
+    if "action_counts" in metrics:
+        return metrics["action_counts"]
+    if "final_action_counts" in metrics:
+        return metrics["final_action_counts"]
+    raise ValueError("metrics must include action_counts or final_action_counts")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="society-sim")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -31,11 +39,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         result = run_experiment(config)
+        metrics = result.metrics
+        action_counts = _require_action_counts(metrics)
     except (OSError, ValueError) as exc:
         parser.error(f"Experiment run failed for '{args.config}': {exc}")
-
-    metrics = result.metrics
-    action_counts = metrics.get("action_counts", metrics.get("final_action_counts"))
 
     print(f"experiment={config.experiment_name}")
     if hasattr(result, "true_state"):

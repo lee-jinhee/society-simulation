@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from society_simulation import cli
@@ -151,3 +152,86 @@ def test_example_network_config_exists_and_is_valid() -> None:
 
     assert isinstance(config, NetworkHerdingConfig)
     assert config.experiment_name == "network_herding"
+
+
+@pytest.mark.parametrize("error", [OSError("disk full"), ValueError("bad run")])
+def test_cli_run_runtime_failures_report_experiment_run_error(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    error: OSError | ValueError,
+) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "experiment_name": "sequential_information_cascade",
+                "seed": 5,
+                "num_agents": 4,
+                "true_state": "A",
+                "signal_accuracy": 0.7,
+                "prior_probability": 0.5,
+                "scheduler": "sequential",
+                "observation_policy": "previous_actions",
+                "update_policy": "simple_heuristic",
+                "output_dir": str(tmp_path / "run"),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def raise_runtime_error(_config: object) -> object:
+        raise error
+
+    monkeypatch.setattr(cli, "run_experiment", raise_runtime_error)
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["run", str(config_path)])
+
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr().err
+    assert "Experiment run failed" in captured
+    assert str(error) in captured
+    assert "Invalid config file" not in captured
+    assert "Traceback" not in captured
+
+
+def test_cli_run_missing_action_counts_reports_experiment_run_error(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "experiment_name": "network_herding",
+                "seed": 5,
+                "num_agents": 6,
+                "initial_opinion": {"type": "bernoulli", "probability_a": 0.5},
+                "topology": {"type": "cycle"},
+                "scheduler": {"type": "synchronous_rounds", "rounds": 2},
+                "observation_policy": {"type": "neighbor_actions"},
+                "update_policy": {"type": "majority_rule"},
+                "output_dir": str(tmp_path / "network-run"),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        cli,
+        "run_experiment",
+        lambda _config: SimpleNamespace(metrics={}, output_dir=tmp_path / "network-run"),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["run", str(config_path)])
+
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "Experiment run failed" in captured.err
+    assert "metrics must include action_counts or final_action_counts" in captured.err
+    assert "Invalid config file" not in captured.err
+    assert "Traceback" not in captured.err
+    assert "action_counts=None" not in captured.out

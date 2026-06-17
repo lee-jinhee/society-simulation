@@ -1,6 +1,6 @@
 # Society Simulation
 
-Network Herding v0 is a no-LLM simulation of sequential information cascades.
+Network Herding v0 is a no-LLM simulation of sequential information cascades and network herding dynamics.
 
 ## Setup
 
