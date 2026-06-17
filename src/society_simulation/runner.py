@@ -5,9 +5,10 @@ from pathlib import Path
 import random
 from typing import Any
 
-from society_simulation.config import ExperimentConfig
+from society_simulation.config import Config, ExperimentConfig, NetworkHerdingConfig
 from society_simulation.metrics import compute_metrics
 from society_simulation.models import Action, AgentProfile, AgentState
+from society_simulation.network_runner import NetworkRunResult, run_network_herding
 from society_simulation.policies import build_update_policy
 from society_simulation.replay import ReplayWriter
 from society_simulation.scheduling import PreviousActionsObservation, SequentialScheduler
@@ -22,7 +23,13 @@ class RunResult:
     output_dir: Path
 
 
-def run_experiment(config: ExperimentConfig) -> RunResult:
+def run_experiment(config: Config) -> RunResult | NetworkRunResult:
+    if isinstance(config, NetworkHerdingConfig):
+        return run_network_herding(config)
+    return run_sequential_information_cascade(config)
+
+
+def run_sequential_information_cascade(config: ExperimentConfig) -> RunResult:
     config.validate()
     rng = random.Random(config.seed)
     signal_model = BinarySignalModel(signal_accuracy=config.signal_accuracy, rng=rng)

@@ -121,3 +121,13 @@ def test_run_experiment_is_deterministic_for_same_seed(tmp_path: Path) -> None:
     ]
     assert normalized_first == normalized_second
     assert first.metrics == second.metrics
+
+
+def test_run_experiment_still_supports_sequential_config(tmp_path: Path) -> None:
+    config = make_config(tmp_path, output_name="sequential-after-dispatch")
+
+    result = run_experiment(config)
+
+    assert result.true_state == "A"
+    assert len(result.states) == 6
+    assert (result.output_dir / "steps.jsonl").exists()
