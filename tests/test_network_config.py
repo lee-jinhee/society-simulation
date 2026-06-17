@@ -38,6 +38,30 @@ def test_load_network_herding_config(tmp_path: Path) -> None:
     assert config.output_dir == str(tmp_path / "network-run")
 
 
+def test_network_config_to_dict_round_trips_without_none_optionals(tmp_path: Path) -> None:
+    config = NetworkHerdingConfig.from_dict(valid_network_config(tmp_path))
+    payload = config.to_dict()
+
+    assert "edge_probability" not in payload["topology"]
+    assert "self_weight" not in payload["update_policy"]
+
+    NetworkHerdingConfig.from_dict(payload).validate()
+
+
+def test_network_config_to_dict_preserves_present_optional_fields(tmp_path: Path) -> None:
+    data = valid_network_config(tmp_path)
+    data["topology"] = {"type": "erdos_renyi", "edge_probability": 0.25}
+    data["update_policy"] = {"type": "degroot", "self_weight": 0.3}
+
+    config = NetworkHerdingConfig.from_dict(data)
+    payload = config.to_dict()
+
+    assert payload["topology"]["edge_probability"] == 0.25
+    assert payload["update_policy"]["self_weight"] == 0.3
+
+    NetworkHerdingConfig.from_dict(payload).validate()
+
+
 def test_load_network_herding_config_rejects_root_non_object(tmp_path: Path) -> None:
     config_path = tmp_path / "network.json"
     config_path.write_text("[1, 2, 3]", encoding="utf-8")

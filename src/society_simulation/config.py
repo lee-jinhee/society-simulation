@@ -134,6 +134,9 @@ class InitialOpinionConfig:
         if not 0.0 <= self.probability_a <= 1.0:
             raise ValueError("probability_a must be between 0 and 1")
 
+    def to_dict(self) -> dict[str, object]:
+        return {"type": self.type, "probability_a": self.probability_a}
+
 
 @dataclass(frozen=True)
 class TopologyConfig:
@@ -203,6 +206,16 @@ class TopologyConfig:
 
         raise ValueError("unsupported topology type")
 
+    def to_dict(self) -> dict[str, object]:
+        data: dict[str, object] = {"type": self.type}
+        if self.degree is not None:
+            data["degree"] = self.degree
+        if self.edge_probability is not None:
+            data["edge_probability"] = self.edge_probability
+        if self.rewiring_probability is not None:
+            data["rewiring_probability"] = self.rewiring_probability
+        return data
+
 
 @dataclass(frozen=True)
 class NetworkSchedulerConfig:
@@ -226,6 +239,9 @@ class NetworkSchedulerConfig:
         if self.rounds <= 0:
             raise ValueError("rounds must be positive")
 
+    def to_dict(self) -> dict[str, object]:
+        return {"type": self.type, "rounds": self.rounds}
+
 
 @dataclass(frozen=True)
 class NetworkObservationPolicyConfig:
@@ -239,6 +255,9 @@ class NetworkObservationPolicyConfig:
     def validate(self) -> None:
         if self.type != "neighbor_actions":
             raise ValueError("unsupported observation_policy type")
+
+    def to_dict(self) -> dict[str, object]:
+        return {"type": self.type}
 
 
 @dataclass(frozen=True)
@@ -288,6 +307,14 @@ class NetworkUpdatePolicyConfig:
             return
 
         raise ValueError("unsupported network update_policy type")
+
+    def to_dict(self) -> dict[str, object]:
+        data: dict[str, object] = {"type": self.type}
+        if self.adoption_threshold is not None:
+            data["adoption_threshold"] = self.adoption_threshold
+        if self.self_weight is not None:
+            data["self_weight"] = self.self_weight
+        return data
 
 
 @dataclass(frozen=True)
@@ -341,7 +368,17 @@ class NetworkHerdingConfig:
         self.update_policy.validate()
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        return {
+            "experiment_name": self.experiment_name,
+            "seed": self.seed,
+            "num_agents": self.num_agents,
+            "initial_opinion": self.initial_opinion.to_dict(),
+            "topology": self.topology.to_dict(),
+            "scheduler": self.scheduler.to_dict(),
+            "observation_policy": self.observation_policy.to_dict(),
+            "update_policy": self.update_policy.to_dict(),
+            "output_dir": self.output_dir,
+        }
 
 
 Config = ExperimentConfig | NetworkHerdingConfig
