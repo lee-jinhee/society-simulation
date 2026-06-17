@@ -14,6 +14,11 @@ def initialize_network_states(
     probability_a: float,
     rng: random.Random,
 ) -> tuple[NetworkAgentState, ...]:
+    if num_agents <= 0:
+        raise ValueError("num_agents must be positive")
+    if probability_a < 0.0 or probability_a > 1.0:
+        raise ValueError("probability_a must be between 0 and 1")
+
     states: list[NetworkAgentState] = []
     for agent_id in range(num_agents):
         action: Action = "A" if rng.random() < probability_a else "B"
@@ -37,7 +42,15 @@ def build_neighbor_observations(
     states: Iterable[NetworkAgentState],
     round_index: int,
 ) -> tuple[NetworkObservation, ...]:
-    states_by_id = {state.agent_id: state for state in states}
+    states_snapshot = tuple(states)
+    state_ids = tuple(state.agent_id for state in states_snapshot)
+    graph_node_ids = set(graph.adjacency)
+    if len(state_ids) != len(set(state_ids)) or set(state_ids) != graph_node_ids:
+        raise ValueError("states must contain one state per graph node")
+    if len(state_ids) != len(graph_node_ids):
+        raise ValueError("states must contain one state per graph node")
+
+    states_by_id = {state.agent_id: state for state in states_snapshot}
 
     observations: list[NetworkObservation] = []
     for agent_id in sorted(states_by_id):
