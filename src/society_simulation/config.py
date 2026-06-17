@@ -62,14 +62,7 @@ def _validate_probability(
     min_label: str | None = None,
     max_label: str | None = None,
 ) -> float:
-    try:
-        parsed = float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(
-            f"{field} must be between "
-            f"{min_label or _format_bound(min_value)} and "
-            f"{max_label or _format_bound(max_value)}"
-        ) from exc
+    parsed = _require_float(value, field)
 
     if not min_value <= parsed <= max_value:
         raise ValueError(
@@ -80,6 +73,38 @@ def _validate_probability(
     return parsed
 
 
+def _require_mapping(value: object, path: str) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise ValueError(f"{path} must be an object")
+    return value
+
+
+def _require_field(data: dict[str, object], field: str, path: str) -> object:
+    if field not in data:
+        raise ValueError(f"{path} is required")
+    return data[field]
+
+
+def _require_int(value: object, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{field} must be an integer")
+    return value
+
+
+def _require_float(value: object, field: str) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"{field} must be a number")
+    if not isinstance(value, (int, float)):
+        raise ValueError(f"{field} must be a number")
+    return float(value)
+
+
+def _require_non_empty_str(value: object, field: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field} must be a non-empty string")
+    return value
+
+
 @dataclass(frozen=True)
 class InitialOpinionConfig:
     type: str
@@ -87,7 +112,18 @@ class InitialOpinionConfig:
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> InitialOpinionConfig:
-        return cls(type=data["type"], probability_a=data["probability_a"])
+        data = _require_mapping(data, "initial_opinion")
+        return cls(
+            type=_require_field(data, "type", "initial_opinion.type"),  # type: ignore[assignment]
+            probability_a=_require_float(
+                _require_field(
+                    data,
+                    "probability_a",
+                    "initial_opinion.probability_a",
+                ),
+                "probability_a",
+            ),
+        )
 
     def validate(self) -> None:
         if self.type != "bernoulli":
@@ -95,7 +131,8 @@ class InitialOpinionConfig:
 
         if self.probability_a is None:
             raise ValueError("probability_a must be between 0 and 1")
-        _validate_probability(self.probability_a, "probability_a", 0.0, 1.0)
+        if not 0.0 <= self.probability_a <= 1.0:
+            raise ValueError("probability_a must be between 0 and 1")
 
 
 @dataclass(frozen=True)
@@ -107,17 +144,32 @@ class TopologyConfig:
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> TopologyConfig:
+        data = _require_mapping(data, "topology")
+        edge_probability: float | None
+        if "edge_probability" in data:
+            edge_probability = _require_float(data["edge_probability"], "topology.edge_probability")
+        else:
+            edge_probability = None
+        rewiring_probability: float | None
+        if "rewiring_probability" in data:
+            rewiring_probability = _require_float(
+                data["rewiring_probability"], "topology.rewiring_probability"
+            )
+        else:
+            rewiring_probability = None
         return cls(
-            type=data["type"],
+            type=_require_field(data, "type", "topology.type"),  # type: ignore[assignment]
             degree=data.get("degree"),
-            edge_probability=data.get("edge_probability"),
-            rewiring_probability=data.get("rewiring_probability"),
+            edge_probability=edge_probability,
+            rewiring_probability=rewiring_probability,
         )
 
     def validate(self, num_agents: int) -> None:
         if self.type == "complete":
             return
         if self.type == "cycle":
+            if num_agents < 3:
+                raise ValueError("cycle topology requires at least 3 agents")
             return
         if self.type == "erdos_renyi":
             if self.edge_probability is None:
@@ -134,9 +186,10 @@ class TopologyConfig:
                 raise ValueError("small_world degree must be a positive even integer")
             if isinstance(self.degree, bool) or not isinstance(self.degree, int):
                 raise ValueError("small_world degree must be a positive even integer")
-            if self.degree <= 0 or self.degree % 2 != 0:
+            degree = self.degree
+            if degree <= 0 or degree % 2 != 0:
                 raise ValueError("small_world degree must be a positive even integer")
-            if self.degree >= num_agents:
+            if degree >= num_agents:
                 raise ValueError("small_world degree must be less than num_agents")
             if self.rewiring_probability is None:
                 raise ValueError("rewiring_probability must be between 0 and 1")
@@ -158,7 +211,14 @@ class NetworkSchedulerConfig:
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> NetworkSchedulerConfig:
-        return cls(type=data["type"], rounds=data["rounds"])
+        data = _require_mapping(data, "scheduler")
+        return cls(
+            type=_require_field(data, "type", "scheduler.type"),  # type: ignore[assignment]
+            rounds=_require_int(
+                _require_field(data, "rounds", "scheduler.rounds"),
+                "scheduler.rounds",
+            ),
+        )
 
     def validate(self) -> None:
         if self.type != "synchronous_rounds":
@@ -173,7 +233,8 @@ class NetworkObservationPolicyConfig:
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> NetworkObservationPolicyConfig:
-        return cls(type=data["type"])
+        data = _require_mapping(data, "observation_policy")
+        return cls(type=_require_field(data, "type", "observation_policy.type"))  # type: ignore[assignment]
 
     def validate(self) -> None:
         if self.type != "neighbor_actions":
@@ -188,10 +249,21 @@ class NetworkUpdatePolicyConfig:
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> NetworkUpdatePolicyConfig:
+        data = _require_mapping(data, "update_policy")
+        if "adoption_threshold" in data:
+            adoption_threshold: float | None = _require_float(
+                data["adoption_threshold"], "adoption_threshold"
+            )
+        else:
+            adoption_threshold = None
+        if "self_weight" in data:
+            self_weight: float | None = _require_float(data["self_weight"], "self_weight")
+        else:
+            self_weight = None
         return cls(
-            type=data["type"],
-            adoption_threshold=data.get("adoption_threshold"),
-            self_weight=data.get("self_weight"),
+            type=_require_field(data, "type", "update_policy.type"),  # type: ignore[assignment]
+            adoption_threshold=adoption_threshold,
+            self_weight=self_weight,
         )
 
     def validate(self) -> None:
@@ -232,18 +304,26 @@ class NetworkHerdingConfig:
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> NetworkHerdingConfig:
+        data = _require_mapping(data, "network config")
         return cls(
-            experiment_name=data["experiment_name"],
-            seed=int(data["seed"]),
-            num_agents=int(data["num_agents"]),
-            initial_opinion=InitialOpinionConfig.from_dict(data["initial_opinion"]),
-            topology=TopologyConfig.from_dict(data["topology"]),
-            scheduler=NetworkSchedulerConfig.from_dict(data["scheduler"]),
-            observation_policy=NetworkObservationPolicyConfig.from_dict(
-                data["observation_policy"]
+            experiment_name=_require_field(data, "experiment_name", "experiment_name"),  # type: ignore[assignment]
+            seed=_require_int(_require_field(data, "seed", "seed"), "seed"),
+            num_agents=_require_int(_require_field(data, "num_agents", "num_agents"), "num_agents"),
+            initial_opinion=InitialOpinionConfig.from_dict(
+                _require_field(data, "initial_opinion", "initial_opinion")
             ),
-            update_policy=NetworkUpdatePolicyConfig.from_dict(data["update_policy"]),
-            output_dir=data["output_dir"],
+            topology=TopologyConfig.from_dict(_require_field(data, "topology", "topology")),
+            scheduler=NetworkSchedulerConfig.from_dict(_require_field(data, "scheduler", "scheduler")),
+            observation_policy=NetworkObservationPolicyConfig.from_dict(
+                _require_field(data, "observation_policy", "observation_policy")
+            ),
+            update_policy=NetworkUpdatePolicyConfig.from_dict(
+                _require_field(data, "update_policy", "update_policy")
+            ),
+            output_dir=_require_non_empty_str(
+                _require_field(data, "output_dir", "output_dir"),
+                "output_dir",
+            ),
         )
 
     def validate(self) -> None:
@@ -251,8 +331,8 @@ class NetworkHerdingConfig:
             raise ValueError("unsupported experiment_name")
         if self.num_agents <= 0:
             raise ValueError("num_agents must be positive")
-        if not self.output_dir:
-            raise ValueError("output_dir must not be empty")
+        if not isinstance(self.output_dir, str) or not self.output_dir:
+            raise ValueError("output_dir must be a non-empty string")
 
         self.initial_opinion.validate()
         self.topology.validate(self.num_agents)
@@ -270,6 +350,8 @@ Config = ExperimentConfig | NetworkHerdingConfig
 def load_config(path: str | Path) -> Config:
     config_path = Path(path)
     data = json.loads(config_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("config root must be an object")
     if data.get("experiment_name") == "network_herding":
         config = NetworkHerdingConfig.from_dict(data)
     else:
