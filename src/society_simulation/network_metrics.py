@@ -23,6 +23,7 @@ def compute_round_metrics(
         raise ValueError("states must not be empty")
 
     _validate_state_snapshot(graph, states, _STATE_SNAPSHOT_ERROR)
+    round_index = _validate_round_index(states, "states must share the same round_index")
     beliefs = [state.belief_probability for state in states]
     actions = [state.action for state in states]
     action_changes = 0
@@ -38,7 +39,7 @@ def compute_round_metrics(
         )
 
     return {
-        "round_index": states[0].round_index,
+        "round_index": round_index,
         "a_fraction": actions.count("A") / len(actions),
         "belief_mean": mean(beliefs),
         "belief_variance": pvariance(beliefs) if len(beliefs) > 1 else 0.0,
@@ -140,6 +141,13 @@ def _validate_state_snapshot(
     return {state.agent_id: state for state in states}
 
 
+def _validate_round_index(states: tuple[NetworkAgentState, ...], error_message: str) -> int:
+    round_index = states[0].round_index
+    if any(state.round_index != round_index for state in states[1:]):
+        raise ValueError(error_message)
+    return round_index
+
+
 def _validate_round_history(
     graph: Graph,
     rounds: tuple[tuple[NetworkAgentState, ...], ...],
@@ -149,6 +157,7 @@ def _validate_round_history(
         if not states:
             raise ValueError(_EMPTY_ROUND_ERROR)
         _validate_state_snapshot(graph, states, _ROUND_HISTORY_ERROR)
+        _validate_round_index(states, "rounds must contain states with matching round_index")
         validated_rounds.append(states)
     return tuple(validated_rounds)
 

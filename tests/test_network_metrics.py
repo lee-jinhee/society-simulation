@@ -86,6 +86,18 @@ def test_round_metrics_rejects_duplicate_state_ids() -> None:
         compute_round_metrics(graph, states)
 
 
+def test_round_metrics_rejects_mixed_round_indices_in_snapshot() -> None:
+    graph = Graph({0: (1,), 1: (0,), 2: ()})
+    states = (
+        state(0, "A", 0.8, 1),
+        state(1, "B", 0.2, 2),
+        state(2, "A", 0.6, 1),
+    )
+
+    with pytest.raises(ValueError, match="states must share the same round_index"):
+        compute_round_metrics(graph, states)
+
+
 def test_round_metrics_rejects_previous_state_id_mismatch() -> None:
     graph = Graph({0: (1,), 1: (0,), 2: ()})
     current = (
@@ -171,6 +183,22 @@ def test_final_metrics_rejects_state_id_mismatch_in_any_round() -> None:
     )
 
     with pytest.raises(ValueError, match="rounds must contain one state per graph node"):
+        compute_final_network_metrics(graph, rounds)
+
+
+def test_final_metrics_rejects_mixed_round_indices_within_a_round() -> None:
+    graph = Graph({0: (1,), 1: (0,)})
+    rounds = (
+        (
+            state(0, "A", 0.9, 0),
+            state(1, "B", 0.1, 1),
+        ),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="rounds must contain states with matching round_index",
+    ):
         compute_final_network_metrics(graph, rounds)
 
 
