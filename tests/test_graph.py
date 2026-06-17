@@ -50,3 +50,13 @@ def test_graph_rejects_self_edges() -> None:
 def test_graph_rejects_asymmetric_edges() -> None:
     with pytest.raises(ValueError, match="graph edges must be undirected"):
         Graph({0: (1,), 1: ()})
+
+
+def test_graph_rejects_non_contiguous_node_ids() -> None:
+    with pytest.raises(ValueError, match="graph node ids must be contiguous from 0"):
+        Graph({2: (3,), 3: (2,)})
+
+
+def test_graph_rejects_negative_node_ids() -> None:
+    with pytest.raises(ValueError, match="graph node ids must be contiguous from 0"):
+        Graph({-1: (0,), 0: (-1,)})

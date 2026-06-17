@@ -17,11 +17,14 @@ class Graph:
             normalized[node] = tuple(sorted(set(neighbors)))
 
         object.__setattr__(self, "adjacency", dict(sorted(normalized.items())))
+        nodes = set(self.adjacency)
+        if nodes != set(range(len(nodes))):
+            raise ValueError("graph node ids must be contiguous from 0")
+
         for node, neighbors in self.adjacency.items():
             if node in neighbors:
                 raise ValueError("graph cannot contain self edges")
 
-        nodes = set(self.adjacency)
         for node, neighbors in self.adjacency.items():
             for neighbor in neighbors:
                 if neighbor not in nodes:
