@@ -8,6 +8,28 @@ from society_simulation.graph import Graph
 from society_simulation.network_models import NetworkAgentState
 from society_simulation.network_replay import NetworkReplayWriter
 
+REQUIRED_TIMESERIES_ROW = {
+    "round_index": 0,
+    "a_fraction": 0.5,
+    "belief_mean": 0.5,
+    "belief_variance": 0.25,
+    "edge_disagreement_rate": 1.0,
+    "action_changes": 0,
+}
+
+REQUIRED_METRICS = {
+    "final_action_counts": {"A": 1, "B": 1},
+    "final_a_fraction": 0.5,
+    "consensus_reached": False,
+    "consensus_action": None,
+    "time_to_consensus": None,
+    "polarization_index": 1.0,
+    "opinion_variance": 0.25,
+    "mean_belief": 0.5,
+    "edge_disagreement_rate": 1.0,
+    "component_count": 1,
+}
+
 
 def make_config(tmp_path: Path) -> NetworkHerdingConfig:
     return NetworkHerdingConfig.from_dict(
@@ -44,13 +66,11 @@ def test_network_replay_writer_writes_all_artifacts(tmp_path: Path) -> None:
         (state(0, "A", 1.0, 0), state(1, "B", 0.0, 0)),
         (state(0, "B", 0.0, 1), state(1, "A", 1.0, 1)),
     )
-    timeseries = [{"round_index": 0}, {"round_index": 1}]
-    metrics = {
-        "final_action_counts": {"A": 1, "B": 1},
-        "consensus_reached": False,
-        "consensus_action": None,
-        "edge_disagreement_rate": 1.0,
-    }
+    timeseries = [
+        REQUIRED_TIMESERIES_ROW,
+        {**REQUIRED_TIMESERIES_ROW, "round_index": 1, "action_changes": 2},
+    ]
+    metrics = REQUIRED_METRICS
 
     output_dir = NetworkReplayWriter(config).write(
         graph=graph,
@@ -127,12 +147,7 @@ def test_network_replay_writer_rejects_invalid_rounds(
             graph=graph,
             rounds=rounds,
             timeseries=[],
-            metrics={
-                "final_action_counts": {"A": 1, "B": 1},
-                "consensus_reached": False,
-                "consensus_action": None,
-                "edge_disagreement_rate": 1.0,
-            },
+            metrics=REQUIRED_METRICS,
         )
 
     assert not (tmp_path / "network-run").exists()
@@ -151,12 +166,7 @@ def test_network_replay_writer_rejects_mismatched_timeseries_length(tmp_path: Pa
             graph=graph,
             rounds=rounds,
             timeseries=[{"round_index": 0}],
-            metrics={
-                "final_action_counts": {"A": 1, "B": 1},
-                "consensus_reached": False,
-                "consensus_action": None,
-                "edge_disagreement_rate": 1.0,
-            },
+            metrics=REQUIRED_METRICS,
         )
 
     assert not (tmp_path / "network-run").exists()
@@ -176,13 +186,11 @@ def test_network_replay_writer_rejects_mismatched_timeseries_round_index(
         NetworkReplayWriter(config).write(
             graph=graph,
             rounds=rounds,
-            timeseries=[{"round_index": 0}, {"round_index": 2}],
-            metrics={
-                "final_action_counts": {"A": 1, "B": 1},
-                "consensus_reached": False,
-                "consensus_action": None,
-                "edge_disagreement_rate": 1.0,
-            },
+            timeseries=[
+                REQUIRED_TIMESERIES_ROW,
+                {**REQUIRED_TIMESERIES_ROW, "round_index": 2},
+            ],
+            metrics=REQUIRED_METRICS,
         )
 
     assert not (tmp_path / "network-run").exists()
@@ -206,13 +214,11 @@ def test_network_replay_writer_rejects_mixed_round_indices(tmp_path: Path) -> No
         NetworkReplayWriter(config).write(
             graph=graph,
             rounds=rounds,
-            timeseries=[{"round_index": 0}, {"round_index": 1}],
-            metrics={
-                "final_action_counts": {"A": 1, "B": 1},
-                "consensus_reached": False,
-                "consensus_action": None,
-                "edge_disagreement_rate": 1.0,
-            },
+            timeseries=[
+                REQUIRED_TIMESERIES_ROW,
+                {**REQUIRED_TIMESERIES_ROW, "round_index": 1},
+            ],
+            metrics=REQUIRED_METRICS,
         )
 
     assert not (tmp_path / "network-run").exists()
@@ -226,16 +232,44 @@ def test_network_replay_writer_rejects_missing_metric_key(tmp_path: Path) -> Non
         (state(0, "B", 0.0, 1), state(1, "A", 1.0, 1)),
     )
 
-    with pytest.raises(ValueError, match="metrics is missing required key: edge_disagreement_rate"):
+    with pytest.raises(ValueError, match="metrics is missing required key: component_count"):
         NetworkReplayWriter(config).write(
             graph=graph,
             rounds=rounds,
-            timeseries=[{"round_index": 0}, {"round_index": 1}],
-            metrics={
-                "final_action_counts": {"A": 1, "B": 1},
-                "consensus_reached": False,
-                "consensus_action": None,
-            },
+            timeseries=[
+                REQUIRED_TIMESERIES_ROW,
+                {**REQUIRED_TIMESERIES_ROW, "round_index": 1},
+            ],
+            metrics={key: value for key, value in REQUIRED_METRICS.items() if key != "component_count"},
+        )
+
+    assert not (tmp_path / "network-run").exists()
+
+
+def test_network_replay_writer_rejects_missing_timeseries_row_key(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    graph = Graph({0: (1,), 1: (0,)}, topology={"type": "complete"})
+    rounds = (
+        (state(0, "A", 1.0, 0), state(1, "B", 0.0, 0)),
+        (state(0, "B", 0.0, 1), state(1, "A", 1.0, 1)),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="timeseries row 1 is missing required key: action_changes",
+    ):
+        NetworkReplayWriter(config).write(
+            graph=graph,
+            rounds=rounds,
+            timeseries=[
+                REQUIRED_TIMESERIES_ROW,
+                {
+                    key: value
+                    for key, value in {**REQUIRED_TIMESERIES_ROW, "round_index": 1}.items()
+                    if key != "action_changes"
+                },
+            ],
+            metrics=REQUIRED_METRICS,
         )
 
     assert not (tmp_path / "network-run").exists()

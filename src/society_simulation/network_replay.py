@@ -8,6 +8,28 @@ from society_simulation.config import NetworkHerdingConfig
 from society_simulation.graph import Graph
 from society_simulation.network_models import NetworkAgentState
 
+_REQUIRED_TIMESERIES_KEYS = (
+    "round_index",
+    "a_fraction",
+    "belief_mean",
+    "belief_variance",
+    "edge_disagreement_rate",
+    "action_changes",
+)
+
+_REQUIRED_METRIC_KEYS = (
+    "final_action_counts",
+    "final_a_fraction",
+    "consensus_reached",
+    "consensus_action",
+    "time_to_consensus",
+    "polarization_index",
+    "opinion_variance",
+    "mean_belief",
+    "edge_disagreement_rate",
+    "component_count",
+)
+
 
 class NetworkReplayWriter:
     def __init__(self, config: NetworkHerdingConfig) -> None:
@@ -58,20 +80,16 @@ class NetworkReplayWriter:
         if len(timeseries) != len(rounds):
             raise ValueError("timeseries must contain one row per round")
         for index, (row, states) in enumerate(zip(timeseries, rounds)):
-            if "round_index" not in row:
-                raise ValueError(f"timeseries row {index} must include round_index")
+            for key in _REQUIRED_TIMESERIES_KEYS:
+                if key not in row:
+                    raise ValueError(f"timeseries row {index} is missing required key: {key}")
             expected_round_index = states[0].round_index
             if row["round_index"] != expected_round_index:
                 raise ValueError(
                     f"timeseries row {index} must have round_index {expected_round_index}"
                 )
 
-        for key in (
-            "final_action_counts",
-            "consensus_reached",
-            "consensus_action",
-            "edge_disagreement_rate",
-        ):
+        for key in _REQUIRED_METRIC_KEYS:
             if key not in metrics:
                 raise ValueError(f"metrics is missing required key: {key}")
 
