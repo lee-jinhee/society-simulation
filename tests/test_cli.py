@@ -108,3 +108,46 @@ def test_cli_run_invalid_config_reports_clean_error(
     assert "Invalid config file" in captured
     assert "num_agents must be positive" in captured
     assert "Traceback" not in captured
+
+
+def test_cli_runs_network_herding_config_and_prints_summary(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_path = tmp_path / "network.json"
+    output_dir = tmp_path / "network-run"
+    config_path.write_text(
+        json.dumps(
+            {
+                "experiment_name": "network_herding",
+                "seed": 5,
+                "num_agents": 6,
+                "initial_opinion": {"type": "bernoulli", "probability_a": 0.5},
+                "topology": {"type": "cycle"},
+                "scheduler": {"type": "synchronous_rounds", "rounds": 2},
+                "observation_policy": {"type": "neighbor_actions"},
+                "update_policy": {"type": "majority_rule"},
+                "output_dir": str(output_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = cli.main(["run", str(config_path)])
+
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert "experiment=network_herding" in output
+    assert "action_counts=" in output
+    assert "output_dir=" in output
+    assert (output_dir / "graph.json").exists()
+    assert (output_dir / "timeseries.jsonl").exists()
+
+
+def test_example_network_config_exists_and_is_valid() -> None:
+    from society_simulation.config import NetworkHerdingConfig, load_config
+
+    config = load_config("examples/network_herding.json")
+
+    assert isinstance(config, NetworkHerdingConfig)
+    assert config.experiment_name == "network_herding"

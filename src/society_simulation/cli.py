@@ -24,18 +24,31 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         config = load_config(args.config)
-        result = run_experiment(config)
     except OSError as exc:
         parser.error(f"Unable to read config file '{args.config}': {exc}")
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
         parser.error(f"Invalid config file '{args.config}': {exc}")
+
+    try:
+        result = run_experiment(config)
+    except (OSError, ValueError) as exc:
+        parser.error(f"Experiment run failed for '{args.config}': {exc}")
+
     metrics = result.metrics
+    action_counts = metrics.get("action_counts", metrics.get("final_action_counts"))
 
     print(f"experiment={config.experiment_name}")
-    print(f"true_state={result.true_state}")
-    print(f"action_counts={metrics['action_counts']}")
-    print(f"correct_cascade={metrics['correct_cascade']}")
-    print(f"wrong_cascade={metrics['wrong_cascade']}")
+    if hasattr(result, "true_state"):
+        print(f"true_state={result.true_state}")
+    print(f"action_counts={action_counts}")
+    if "correct_cascade" in metrics:
+        print(f"correct_cascade={metrics['correct_cascade']}")
+    if "wrong_cascade" in metrics:
+        print(f"wrong_cascade={metrics['wrong_cascade']}")
+    if "consensus_reached" in metrics:
+        print(f"consensus_reached={metrics['consensus_reached']}")
+    if "edge_disagreement_rate" in metrics:
+        print(f"edge_disagreement_rate={metrics['edge_disagreement_rate']}")
     print(f"output_dir={result.output_dir}")
 
     return 0

@@ -1,0 +1,26 @@
+{
+  "experiment_name": "network_herding",
+  "seed": 42,
+  "num_agents": 30,
+  "initial_opinion": {
+    "type": "bernoulli",
+    "probability_a": 0.5
+  },
+  "topology": {
+    "type": "small_world",
+    "degree": 4,
+    "rewiring_probability": 0.1
+  },
+  "scheduler": {
+    "type": "synchronous_rounds",
+    "rounds": 12
+  },
+  "observation_policy": {
+    "type": "neighbor_actions"
+  },
+  "update_policy": {
+    "type": "threshold",
+    "adoption_threshold": 0.6
+  },
+  "output_dir": "runs/network_herding"
+}
