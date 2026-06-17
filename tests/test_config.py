@@ -82,3 +82,29 @@ def test_load_config_from_json(tmp_path: Path) -> None:
     assert config.seed == 7
     assert config.true_state is None
     assert config.update_policy == "simple_heuristic"
+
+
+def test_load_config_keeps_sequential_cascade_type(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        """
+        {
+          "experiment_name": "sequential_information_cascade",
+          "seed": 7,
+          "num_agents": 4,
+          "true_state": null,
+          "signal_accuracy": 0.65,
+          "prior_probability": 0.5,
+          "scheduler": "sequential",
+          "observation_policy": "previous_actions",
+          "update_policy": "simple_heuristic",
+          "output_dir": "runs/example"
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert isinstance(config, ExperimentConfig)
+    assert config.experiment_name == "sequential_information_cascade"
