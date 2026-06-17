@@ -105,6 +105,31 @@ def _require_non_empty_str(value: object, field: str) -> str:
     return value
 
 
+def _parse_optional_int(data: dict[str, object], field: str, path: str) -> int | None:
+    if field not in data:
+        return None
+    return _require_int(data[field], path)
+
+
+def _parse_optional_float(data: dict[str, object], field: str, path: str) -> float | None:
+    if field not in data:
+        return None
+    return _require_float(data[field], path)
+
+
+def _reject_present_fields(
+    data: dict[str, object],
+    *,
+    path_prefix: str,
+    selected_type: str,
+    kind: str,
+    fields: tuple[str, ...],
+) -> None:
+    for field in fields:
+        if field in data:
+            raise ValueError(f"{path_prefix}.{field} is not allowed for {selected_type} {kind}")
+
+
 @dataclass(frozen=True)
 class InitialOpinionConfig:
     type: str
@@ -148,23 +173,51 @@ class TopologyConfig:
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> TopologyConfig:
         data = _require_mapping(data, "topology")
-        edge_probability: float | None
-        if "edge_probability" in data:
-            edge_probability = _require_float(data["edge_probability"], "topology.edge_probability")
-        else:
-            edge_probability = None
-        rewiring_probability: float | None
-        if "rewiring_probability" in data:
-            rewiring_probability = _require_float(
-                data["rewiring_probability"], "topology.rewiring_probability"
+        topology_type = _require_field(data, "type", "topology.type")
+        if not isinstance(topology_type, str):
+            raise ValueError("topology.type must be a non-empty string")
+
+        if topology_type == "complete":
+            _reject_present_fields(
+                data,
+                path_prefix="topology",
+                selected_type=topology_type,
+                kind="topology",
+                fields=("degree", "edge_probability", "rewiring_probability"),
             )
-        else:
-            rewiring_probability = None
+        elif topology_type == "cycle":
+            _reject_present_fields(
+                data,
+                path_prefix="topology",
+                selected_type=topology_type,
+                kind="topology",
+                fields=("degree", "edge_probability", "rewiring_probability"),
+            )
+        elif topology_type == "erdos_renyi":
+            _reject_present_fields(
+                data,
+                path_prefix="topology",
+                selected_type=topology_type,
+                kind="topology",
+                fields=("degree", "rewiring_probability"),
+            )
+        elif topology_type == "small_world":
+            _reject_present_fields(
+                data,
+                path_prefix="topology",
+                selected_type=topology_type,
+                kind="topology",
+                fields=("edge_probability",),
+            )
         return cls(
-            type=_require_field(data, "type", "topology.type"),  # type: ignore[assignment]
-            degree=data.get("degree"),
-            edge_probability=edge_probability,
-            rewiring_probability=rewiring_probability,
+            type=topology_type,
+            degree=_parse_optional_int(data, "degree", "topology.degree"),
+            edge_probability=_parse_optional_float(
+                data, "edge_probability", "topology.edge_probability"
+            ),
+            rewiring_probability=_parse_optional_float(
+                data, "rewiring_probability", "topology.rewiring_probability"
+            ),
         )
 
     def validate(self, num_agents: int) -> None:
@@ -269,20 +322,40 @@ class NetworkUpdatePolicyConfig:
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> NetworkUpdatePolicyConfig:
         data = _require_mapping(data, "update_policy")
-        if "adoption_threshold" in data:
-            adoption_threshold: float | None = _require_float(
-                data["adoption_threshold"], "adoption_threshold"
+        policy_type = _require_field(data, "type", "update_policy.type")
+        if not isinstance(policy_type, str):
+            raise ValueError("update_policy.type must be a non-empty string")
+
+        if policy_type == "majority_rule":
+            _reject_present_fields(
+                data,
+                path_prefix="update_policy",
+                selected_type=policy_type,
+                kind="update_policy",
+                fields=("adoption_threshold", "self_weight"),
             )
-        else:
-            adoption_threshold = None
-        if "self_weight" in data:
-            self_weight: float | None = _require_float(data["self_weight"], "self_weight")
-        else:
-            self_weight = None
+        elif policy_type == "threshold":
+            _reject_present_fields(
+                data,
+                path_prefix="update_policy",
+                selected_type=policy_type,
+                kind="update_policy",
+                fields=("self_weight",),
+            )
+        elif policy_type == "degroot":
+            _reject_present_fields(
+                data,
+                path_prefix="update_policy",
+                selected_type=policy_type,
+                kind="update_policy",
+                fields=("adoption_threshold",),
+            )
         return cls(
-            type=_require_field(data, "type", "update_policy.type"),  # type: ignore[assignment]
-            adoption_threshold=adoption_threshold,
-            self_weight=self_weight,
+            type=policy_type,
+            adoption_threshold=_parse_optional_float(
+                data, "adoption_threshold", "update_policy.adoption_threshold"
+            ),
+            self_weight=_parse_optional_float(data, "self_weight", "update_policy.self_weight"),
         )
 
     def validate(self) -> None:

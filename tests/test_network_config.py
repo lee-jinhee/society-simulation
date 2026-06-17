@@ -94,7 +94,6 @@ def test_network_config_from_dict_rejects_missing_initial_opinion_probability_a(
         (("initial_opinion", "type"), "fixed", "unsupported initial_opinion type"),
         (("topology", "type"), "scale_free", "unsupported topology type"),
         (("topology", "degree"), 3, "small_world degree must be a positive even integer"),
-        (("topology", "degree"), 2.0, "small_world degree must be a positive even integer"),
         (("topology", "degree"), 12, "small_world degree must be less than num_agents"),
         (("topology", "rewiring_probability"), 1.2, "rewiring_probability must be between 0 and 1"),
         (("scheduler", "rounds"), 0, "rounds must be positive"),
@@ -141,6 +140,7 @@ def test_network_config_rejects_invalid_values(
         (("scheduler", "rounds"), 2.5, "scheduler.rounds must be an integer", "from_dict"),
         (("scheduler", "rounds"), True, "scheduler.rounds must be an integer", "from_dict"),
         (("output_dir",), 123, "output_dir must be a non-empty string", "from_dict"),
+        (("topology", "degree"), 2.0, "topology.degree must be an integer", "from_dict"),
         (("topology", "type"), "cycle", "cycle topology requires at least 3 agents", "validate"),
     ],
 )
@@ -159,6 +159,8 @@ def test_network_config_rejects_invalid_types_and_shapes(
 
     if stage == "validate":
         data["num_agents"] = 2
+        if path == ("topology", "type"):
+            data["topology"] = {"type": "cycle"}
         config = NetworkHerdingConfig.from_dict(data)
         with pytest.raises(ValueError, match=message):
             config.validate()
@@ -210,3 +212,68 @@ def test_network_config_supports_degroot_policy(tmp_path: Path) -> None:
 
     config.validate()
     assert config.update_policy.self_weight == 0.3
+
+
+@pytest.mark.parametrize(
+    ("topology_type", "field", "value"),
+    [
+        ("complete", "degree", 4),
+        ("complete", "edge_probability", 0.2),
+        ("complete", "rewiring_probability", 0.2),
+        ("cycle", "degree", 4),
+        ("cycle", "edge_probability", 0.2),
+        ("cycle", "rewiring_probability", 0.2),
+        ("erdos_renyi", "degree", 4),
+        ("erdos_renyi", "rewiring_probability", 0.2),
+        ("small_world", "edge_probability", 0.2),
+    ],
+)
+def test_network_config_rejects_irrelevant_topology_fields(
+    tmp_path: Path,
+    topology_type: str,
+    field: str,
+    value: object,
+) -> None:
+    data = valid_network_config(tmp_path)
+    topology: dict[str, object] = {"type": topology_type}
+    if topology_type == "erdos_renyi":
+        topology["edge_probability"] = 0.25
+    if topology_type == "small_world":
+        topology["degree"] = 4
+        topology["rewiring_probability"] = 0.2
+    data["topology"] = topology
+    topology[field] = value
+
+    with pytest.raises(ValueError, match=rf"topology\.{field} is not allowed for {topology_type} topology"):
+        NetworkHerdingConfig.from_dict(data)
+
+
+@pytest.mark.parametrize(
+    ("policy_type", "field", "value"),
+    [
+        ("majority_rule", "adoption_threshold", 0.9),
+        ("majority_rule", "self_weight", 0.2),
+        ("threshold", "self_weight", 0.2),
+        ("degroot", "adoption_threshold", 0.9),
+    ],
+)
+def test_network_config_rejects_irrelevant_update_policy_fields(
+    tmp_path: Path,
+    policy_type: str,
+    field: str,
+    value: object,
+) -> None:
+    data = valid_network_config(tmp_path)
+    update_policy: dict[str, object] = {"type": policy_type}
+    if policy_type == "threshold":
+        update_policy["adoption_threshold"] = 0.6
+    if policy_type == "degroot":
+        update_policy["self_weight"] = 0.3
+    data["update_policy"] = update_policy
+    update_policy[field] = value
+
+    with pytest.raises(
+        ValueError,
+        match=rf"update_policy\.{field} is not allowed for {policy_type} update_policy",
+    ):
+        NetworkHerdingConfig.from_dict(data)
