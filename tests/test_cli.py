@@ -235,3 +235,137 @@ def test_cli_run_missing_action_counts_reports_experiment_run_error(
     assert "Invalid config file" not in captured.err
     assert "Traceback" not in captured.err
     assert "action_counts=None" not in captured.out
+
+
+def test_cli_sweep_runs_config_and_prints_summary(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sweep_path = tmp_path / "sweep.json"
+    output_dir = tmp_path / "sweep-output"
+    sweep_path.write_text(
+        json.dumps(
+            {
+                "sweep_name": "cli_sweep",
+                "base_config": {
+                    "experiment_name": "network_herding",
+                    "seed": 1,
+                    "num_agents": 6,
+                    "initial_opinion": {"type": "bernoulli", "probability_a": 0.5},
+                    "topology": {"type": "cycle"},
+                    "scheduler": {"type": "synchronous_rounds", "rounds": 2},
+                    "observation_policy": {"type": "neighbor_actions"},
+                    "update_policy": {"type": "majority_rule"},
+                    "output_dir": str(tmp_path / "ignored"),
+                },
+                "factors": [{"name": "seed", "path": "seed", "values": [1, 2]}],
+                "output_dir": str(output_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = cli.main(["sweep", str(sweep_path)])
+
+    assert exit_code == 0
+    output = capsys.readouterr().out.splitlines()
+    assert output == [
+        "sweep=cli_sweep",
+        "runs=2",
+        "completed=2",
+        "failed=0",
+        f"output_dir={output_dir}",
+        f"summary_csv={output_dir / 'summary.csv'}",
+    ]
+    assert (output_dir / "manifest.jsonl").exists()
+    assert (output_dir / "summary.csv").exists()
+
+
+def test_cli_sweep_invalid_config_reports_clean_error(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sweep_path = tmp_path / "bad_sweep.json"
+    sweep_path.write_text(json.dumps({"sweep_name": ""}), encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["sweep", str(sweep_path)])
+
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr().err
+    assert "Invalid sweep config file" in captured
+    assert "sweep_name must be a non-empty string" in captured
+    assert "Traceback" not in captured
+
+
+def test_cli_sweep_missing_path_reports_clean_error(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    missing = tmp_path / "missing_sweep.json"
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["sweep", str(missing)])
+
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr().err
+    assert "Unable to read sweep config file" in captured
+    assert "Traceback" not in captured
+
+
+def test_cli_sweep_returns_one_when_any_run_fails(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sweep_path = tmp_path / "sweep.json"
+    output_dir = tmp_path / "sweep-output"
+    summary_csv = output_dir / "summary.csv"
+    sweep_path.write_text(
+        json.dumps(
+            {
+                "sweep_name": "cli_sweep",
+                "base_config": {
+                    "experiment_name": "network_herding",
+                    "seed": 1,
+                    "num_agents": 6,
+                    "initial_opinion": {"type": "bernoulli", "probability_a": 0.5},
+                    "topology": {"type": "cycle"},
+                    "scheduler": {"type": "synchronous_rounds", "rounds": 2},
+                    "observation_policy": {"type": "neighbor_actions"},
+                    "update_policy": {"type": "majority_rule"},
+                    "output_dir": str(tmp_path / "ignored"),
+                },
+                "factors": [{"name": "seed", "path": "seed", "values": [1, 2]}],
+                "output_dir": str(output_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        cli,
+        "run_sweep",
+        lambda _sweep: SimpleNamespace(
+            sweep_name="cli_sweep",
+            runs=2,
+            completed=1,
+            failed=1,
+            output_dir=output_dir,
+            summary_csv_path=summary_csv,
+        ),
+        raising=False,
+    )
+
+    exit_code = cli.main(["sweep", str(sweep_path)])
+
+    assert exit_code == 1
+    output = capsys.readouterr().out.splitlines()
+    assert output == [
+        "sweep=cli_sweep",
+        "runs=2",
+        "completed=1",
+        "failed=1",
+        f"output_dir={output_dir}",
+        f"summary_csv={summary_csv}",
+    ]

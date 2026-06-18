@@ -6,6 +6,8 @@ from typing import Sequence
 
 from society_simulation.config import load_config
 from society_simulation.runner import run_experiment
+from society_simulation.sweep_config import load_sweep_config
+from society_simulation.sweep_runner import run_sweep
 
 
 def _require_action_counts(metrics: dict[str, object]) -> object:
@@ -20,29 +22,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="society-sim")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("run").add_argument("config")
+    subparsers.add_parser("sweep").add_argument("config")
 
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(list(argv) if argv is not None else None)
-    if args.command != "run":
-        return 1
-
+def _run_single_config(parser: argparse.ArgumentParser, config_path: str) -> int:
     try:
-        config = load_config(args.config)
+        config = load_config(config_path)
     except OSError as exc:
-        parser.error(f"Unable to read config file '{args.config}': {exc}")
+        parser.error(f"Unable to read config file '{config_path}': {exc}")
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
-        parser.error(f"Invalid config file '{args.config}': {exc}")
+        parser.error(f"Invalid config file '{config_path}': {exc}")
 
     try:
         result = run_experiment(config)
         metrics = result.metrics
         action_counts = _require_action_counts(metrics)
     except (OSError, ValueError) as exc:
-        parser.error(f"Experiment run failed for '{args.config}': {exc}")
+        parser.error(f"Experiment run failed for '{config_path}': {exc}")
 
     print(f"experiment={config.experiment_name}")
     if hasattr(result, "true_state"):
@@ -59,3 +57,35 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"output_dir={result.output_dir}")
 
     return 0
+
+
+def _run_sweep_config(parser: argparse.ArgumentParser, config_path: str) -> int:
+    try:
+        sweep = load_sweep_config(config_path)
+    except OSError as exc:
+        parser.error(f"Unable to read sweep config file '{config_path}': {exc}")
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        parser.error(f"Invalid sweep config file '{config_path}': {exc}")
+
+    result = run_sweep(sweep)
+
+    print(f"sweep={result.sweep_name}")
+    print(f"runs={result.runs}")
+    print(f"completed={result.completed}")
+    print(f"failed={result.failed}")
+    print(f"output_dir={result.output_dir}")
+    print(f"summary_csv={result.summary_csv_path}")
+
+    if result.failed > 0:
+        return 1
+    return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(list(argv) if argv is not None else None)
+    if args.command == "run":
+        return _run_single_config(parser, args.config)
+    if args.command == "sweep":
+        return _run_sweep_config(parser, args.config)
+    return 1
