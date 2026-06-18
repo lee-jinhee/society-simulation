@@ -540,3 +540,5 @@ def test_analyze_command_accepts_real_network_topology_sweep(tmp_path: Path) -> 
     assert analysis_result.failed == 0
     assert artifact_paths.report_path.exists()
     assert artifact_paths.group_summary_csv_path.exists()
+    assert artifact_paths.group_summary_json_path.exists()
+    assert artifact_paths.failure_summary_csv_path.exists()
