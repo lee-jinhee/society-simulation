@@ -80,6 +80,30 @@ def test_network_config_to_dict_preserves_mock_llm_policy_fields(tmp_path: Path)
     NetworkHerdingConfig.from_dict(payload).validate()
 
 
+def test_network_config_to_dict_preserves_real_llm_policy_fields(tmp_path: Path) -> None:
+    data = valid_network_config(tmp_path)
+    data["update_policy"] = {
+        "type": "llm",
+        "provider": "openai_compatible",
+        "model": "cheap-chat",
+        "base_url": "https://example.test/v1",
+        "api_key_env": "SOCIETY_SIM_LLM_API_KEY",
+        "temperature": 0.1,
+        "max_completion_tokens": 24,
+        "token_limit_parameter": "max_tokens",
+        "timeout_seconds": 10.0,
+        "input_cost_per_1m_tokens": 0.1,
+        "output_cost_per_1m_tokens": 0.2,
+        "max_estimated_cost_usd": 0.05,
+    }
+
+    config = NetworkHerdingConfig.from_dict(data)
+    payload = config.to_dict()
+
+    assert payload["update_policy"] == data["update_policy"]
+    NetworkHerdingConfig.from_dict(payload).validate()
+
+
 def test_load_network_herding_config_rejects_root_non_object(tmp_path: Path) -> None:
     config_path = tmp_path / "network.json"
     config_path.write_text("[1, 2, 3]", encoding="utf-8")
@@ -117,7 +141,7 @@ def test_network_config_from_dict_rejects_missing_initial_opinion_probability_a(
         (("scheduler", "rounds"), 0, "rounds must be positive"),
         (("scheduler", "type"), "asynchronous", "unsupported scheduler type"),
         (("observation_policy", "type"), "global_actions", "unsupported observation_policy type"),
-        (("update_policy", "type"), "llm", "unsupported network update_policy type"),
+        (("update_policy", "type"), "unsupported_llm", "unsupported network update_policy type"),
         (("update_policy", "adoption_threshold"), 0.49, "adoption_threshold must be between 0.5 and 1.0"),
     ],
 )
@@ -246,6 +270,25 @@ def test_network_config_supports_mock_llm_policy_defaults(tmp_path: Path) -> Non
     assert config.update_policy.output_cost_per_1m_tokens is None
 
 
+def test_network_config_supports_real_llm_policy_defaults(tmp_path: Path) -> None:
+    data = valid_network_config(tmp_path)
+    data["update_policy"] = {"type": "llm", "model": "cheap-chat"}
+
+    config = NetworkHerdingConfig.from_dict(data)
+
+    config.validate()
+    assert config.update_policy.type == "llm"
+    assert config.update_policy.model == "cheap-chat"
+    assert config.update_policy.provider is None
+    assert config.update_policy.base_url is None
+    assert config.update_policy.api_key_env is None
+    assert config.update_policy.temperature is None
+    assert config.update_policy.max_completion_tokens is None
+    assert config.update_policy.token_limit_parameter is None
+    assert config.update_policy.timeout_seconds is None
+    assert config.update_policy.max_estimated_cost_usd is None
+
+
 @pytest.mark.parametrize(
     ("topology_type", "field", "value"),
     [
@@ -289,9 +332,18 @@ def test_network_config_rejects_irrelevant_topology_fields(
         ("degroot", "adoption_threshold", 0.9),
         ("mock_llm", "adoption_threshold", 0.9),
         ("mock_llm", "self_weight", 0.2),
+        ("mock_llm", "base_url", "https://example.test/v1"),
+        ("mock_llm", "api_key_env", "SOCIETY_SIM_LLM_API_KEY"),
+        ("mock_llm", "max_completion_tokens", 32),
+        ("llm", "adoption_threshold", 0.9),
+        ("llm", "self_weight", 0.2),
+        ("llm", "response_style", "current"),
         ("majority_rule", "provider", "mock"),
         ("threshold", "response_style", "current"),
         ("degroot", "input_cost_per_1m_tokens", 0.1),
+        ("majority_rule", "base_url", "https://example.test/v1"),
+        ("threshold", "max_completion_tokens", 32),
+        ("degroot", "max_estimated_cost_usd", 0.1),
     ],
 )
 def test_network_config_rejects_irrelevant_update_policy_fields(
@@ -306,6 +358,8 @@ def test_network_config_rejects_irrelevant_update_policy_fields(
         update_policy["adoption_threshold"] = 0.6
     if policy_type == "degroot":
         update_policy["self_weight"] = 0.3
+    if policy_type == "llm":
+        update_policy["model"] = "cheap-chat"
     data["update_policy"] = update_policy
     update_policy[field] = value
 
@@ -356,4 +410,73 @@ def test_network_config_rejects_invalid_mock_llm_policy_fields(
 
     config = NetworkHerdingConfig.from_dict(data)
     with pytest.raises(ValueError, match=message):
+        config.validate()
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message", "stage"),
+    [
+        ("provider", "mock", "unsupported llm provider", "validate"),
+        ("model", "", "update_policy.model must be a non-empty string", "from_dict"),
+        ("base_url", "", "update_policy.base_url must be a non-empty string", "from_dict"),
+        ("api_key_env", "", "update_policy.api_key_env must be a non-empty string", "from_dict"),
+        ("temperature", -0.1, "temperature must be between 0 and 2", "validate"),
+        ("temperature", 2.1, "temperature must be between 0 and 2", "validate"),
+        ("max_completion_tokens", 0, "max_completion_tokens must be a positive integer", "validate"),
+        ("timeout_seconds", 0, "timeout_seconds must be a positive finite number", "validate"),
+        (
+            "token_limit_parameter",
+            "max_output_tokens",
+            "token_limit_parameter must be max_completion_tokens or max_tokens",
+            "validate",
+        ),
+        (
+            "input_cost_per_1m_tokens",
+            -0.1,
+            "input_cost_per_1m_tokens must be a non-negative finite number",
+            "validate",
+        ),
+        (
+            "output_cost_per_1m_tokens",
+            float("inf"),
+            "output_cost_per_1m_tokens must be a non-negative finite number",
+            "validate",
+        ),
+        (
+            "max_estimated_cost_usd",
+            -0.1,
+            "max_estimated_cost_usd must be a non-negative finite number",
+            "validate",
+        ),
+    ],
+)
+def test_network_config_rejects_invalid_real_llm_policy_fields(
+    tmp_path: Path,
+    field: str,
+    value: object,
+    message: str,
+    stage: str,
+) -> None:
+    data = valid_network_config(tmp_path)
+    update_policy: dict[str, object] = {"type": "llm", "model": "cheap-chat"}
+    update_policy[field] = value
+    data["update_policy"] = update_policy
+
+    if stage == "from_dict":
+        with pytest.raises(ValueError, match=message):
+            NetworkHerdingConfig.from_dict(data)
+        return
+
+    config = NetworkHerdingConfig.from_dict(data)
+    with pytest.raises(ValueError, match=message):
+        config.validate()
+
+
+def test_network_config_rejects_real_llm_policy_without_model(tmp_path: Path) -> None:
+    data = valid_network_config(tmp_path)
+    data["update_policy"] = {"type": "llm"}
+
+    config = NetworkHerdingConfig.from_dict(data)
+
+    with pytest.raises(ValueError, match="model must be a non-empty string"):
         config.validate()

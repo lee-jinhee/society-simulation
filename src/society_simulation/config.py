@@ -131,6 +131,20 @@ def _validate_non_negative_finite_number(value: object, field: str) -> float:
     return parsed
 
 
+def _validate_positive_finite_number(value: object, field: str) -> float:
+    parsed = _require_float(value, field)
+    if not isfinite(parsed) or parsed <= 0:
+        raise ValueError(f"{field} must be a positive finite number")
+    return parsed
+
+
+def _validate_positive_int(value: object, field: str) -> int:
+    parsed = _require_int(value, field)
+    if parsed <= 0:
+        raise ValueError(f"{field} must be a positive integer")
+    return parsed
+
+
 def _reject_present_fields(
     data: dict[str, object],
     *,
@@ -335,8 +349,15 @@ class NetworkUpdatePolicyConfig:
     provider: str | None = None
     model: str | None = None
     response_style: str | None = None
+    base_url: str | None = None
+    api_key_env: str | None = None
+    temperature: float | None = None
+    max_completion_tokens: int | None = None
+    token_limit_parameter: str | None = None
+    timeout_seconds: float | None = None
     input_cost_per_1m_tokens: float | None = None
     output_cost_per_1m_tokens: float | None = None
+    max_estimated_cost_usd: float | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> NetworkUpdatePolicyConfig:
@@ -349,8 +370,24 @@ class NetworkUpdatePolicyConfig:
             "provider",
             "model",
             "response_style",
+            "base_url",
+            "api_key_env",
+            "temperature",
+            "max_completion_tokens",
+            "token_limit_parameter",
+            "timeout_seconds",
             "input_cost_per_1m_tokens",
             "output_cost_per_1m_tokens",
+            "max_estimated_cost_usd",
+        )
+        real_llm_fields = (
+            "base_url",
+            "api_key_env",
+            "temperature",
+            "max_completion_tokens",
+            "token_limit_parameter",
+            "timeout_seconds",
+            "max_estimated_cost_usd",
         )
         if policy_type == "majority_rule":
             _reject_present_fields(
@@ -384,6 +421,21 @@ class NetworkUpdatePolicyConfig:
                 kind="update_policy",
                 fields=("adoption_threshold", "self_weight"),
             )
+            _reject_present_fields(
+                data,
+                path_prefix="update_policy",
+                selected_type=policy_type,
+                kind="update_policy",
+                fields=real_llm_fields,
+            )
+        elif policy_type == "llm":
+            _reject_present_fields(
+                data,
+                path_prefix="update_policy",
+                selected_type=policy_type,
+                kind="update_policy",
+                fields=("adoption_threshold", "self_weight", "response_style"),
+            )
         return cls(
             type=policy_type,
             adoption_threshold=_parse_optional_float(
@@ -397,6 +449,32 @@ class NetworkUpdatePolicyConfig:
                 "response_style",
                 "update_policy.response_style",
             ),
+            base_url=_parse_optional_str(data, "base_url", "update_policy.base_url"),
+            api_key_env=_parse_optional_str(
+                data,
+                "api_key_env",
+                "update_policy.api_key_env",
+            ),
+            temperature=_parse_optional_float(
+                data,
+                "temperature",
+                "update_policy.temperature",
+            ),
+            max_completion_tokens=_parse_optional_int(
+                data,
+                "max_completion_tokens",
+                "update_policy.max_completion_tokens",
+            ),
+            token_limit_parameter=_parse_optional_str(
+                data,
+                "token_limit_parameter",
+                "update_policy.token_limit_parameter",
+            ),
+            timeout_seconds=_parse_optional_float(
+                data,
+                "timeout_seconds",
+                "update_policy.timeout_seconds",
+            ),
             input_cost_per_1m_tokens=_parse_optional_float(
                 data,
                 "input_cost_per_1m_tokens",
@@ -406,6 +484,11 @@ class NetworkUpdatePolicyConfig:
                 data,
                 "output_cost_per_1m_tokens",
                 "update_policy.output_cost_per_1m_tokens",
+            ),
+            max_estimated_cost_usd=_parse_optional_float(
+                data,
+                "max_estimated_cost_usd",
+                "update_policy.max_estimated_cost_usd",
             ),
         )
 
@@ -449,6 +532,41 @@ class NetworkUpdatePolicyConfig:
                     "output_cost_per_1m_tokens",
                 )
             return
+        if self.type == "llm":
+            if self.provider is not None and self.provider != "openai_compatible":
+                raise ValueError("unsupported llm provider")
+            if self.model is None:
+                raise ValueError("model must be a non-empty string")
+            if self.temperature is not None:
+                _validate_probability(self.temperature, "temperature", 0.0, 2.0)
+            if self.max_completion_tokens is not None:
+                _validate_positive_int(
+                    self.max_completion_tokens,
+                    "max_completion_tokens",
+                )
+            if self.token_limit_parameter is not None and self.token_limit_parameter not in (
+                "max_completion_tokens",
+                "max_tokens",
+            ):
+                raise ValueError("token_limit_parameter must be max_completion_tokens or max_tokens")
+            if self.timeout_seconds is not None:
+                _validate_positive_finite_number(self.timeout_seconds, "timeout_seconds")
+            if self.input_cost_per_1m_tokens is not None:
+                _validate_non_negative_finite_number(
+                    self.input_cost_per_1m_tokens,
+                    "input_cost_per_1m_tokens",
+                )
+            if self.output_cost_per_1m_tokens is not None:
+                _validate_non_negative_finite_number(
+                    self.output_cost_per_1m_tokens,
+                    "output_cost_per_1m_tokens",
+                )
+            if self.max_estimated_cost_usd is not None:
+                _validate_non_negative_finite_number(
+                    self.max_estimated_cost_usd,
+                    "max_estimated_cost_usd",
+                )
+            return
 
         raise ValueError("unsupported network update_policy type")
 
@@ -464,10 +582,24 @@ class NetworkUpdatePolicyConfig:
             data["model"] = self.model
         if self.response_style is not None:
             data["response_style"] = self.response_style
+        if self.base_url is not None:
+            data["base_url"] = self.base_url
+        if self.api_key_env is not None:
+            data["api_key_env"] = self.api_key_env
+        if self.temperature is not None:
+            data["temperature"] = self.temperature
+        if self.max_completion_tokens is not None:
+            data["max_completion_tokens"] = self.max_completion_tokens
+        if self.token_limit_parameter is not None:
+            data["token_limit_parameter"] = self.token_limit_parameter
+        if self.timeout_seconds is not None:
+            data["timeout_seconds"] = self.timeout_seconds
         if self.input_cost_per_1m_tokens is not None:
             data["input_cost_per_1m_tokens"] = self.input_cost_per_1m_tokens
         if self.output_cost_per_1m_tokens is not None:
             data["output_cost_per_1m_tokens"] = self.output_cost_per_1m_tokens
+        if self.max_estimated_cost_usd is not None:
+            data["max_estimated_cost_usd"] = self.max_estimated_cost_usd
         return data
 
 

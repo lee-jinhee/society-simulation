@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from math import isfinite
+import os
 from statistics import mean
 
 from society_simulation.config import NetworkUpdatePolicyConfig
-from society_simulation.llm_policy import MockLLMPolicy
+from society_simulation.llm_policy import MockLLMPolicy, OpenAICompatibleLLMPolicy
 from society_simulation.models import Action
 from society_simulation.network_models import NetworkDecision, NetworkObservation
 from society_simulation.policies import confidence_from_belief
@@ -156,7 +157,9 @@ class DeGrootPolicy:
         )
 
 
-NetworkUpdatePolicy = MajorityRulePolicy | ThresholdPolicy | DeGrootPolicy | MockLLMPolicy
+NetworkUpdatePolicy = (
+    MajorityRulePolicy | ThresholdPolicy | DeGrootPolicy | MockLLMPolicy | OpenAICompatibleLLMPolicy
+)
 
 
 def build_network_update_policy(config: NetworkUpdatePolicyConfig) -> NetworkUpdatePolicy:
@@ -177,5 +180,27 @@ def build_network_update_policy(config: NetworkUpdatePolicyConfig) -> NetworkUpd
             response_style=config.response_style or "neighbor_majority",
             input_cost_per_1m_tokens=config.input_cost_per_1m_tokens or 0.0,
             output_cost_per_1m_tokens=config.output_cost_per_1m_tokens or 0.0,
+        )
+    if config.type == "llm":
+        if config.model is None:
+            raise ValueError("model must be a non-empty string")
+        api_key_env = config.api_key_env or "OPENAI_API_KEY"
+        api_key = os.environ.get(api_key_env)
+        if not api_key:
+            raise ValueError(f"{api_key_env} is required for llm provider")
+        return OpenAICompatibleLLMPolicy(
+            provider=config.provider or "openai_compatible",
+            model=config.model,
+            api_key=api_key,
+            base_url=config.base_url or "https://api.openai.com/v1",
+            temperature=config.temperature if config.temperature is not None else 0.0,
+            max_completion_tokens=(
+                config.max_completion_tokens if config.max_completion_tokens is not None else 32
+            ),
+            token_limit_parameter=config.token_limit_parameter or "max_completion_tokens",
+            timeout_seconds=config.timeout_seconds if config.timeout_seconds is not None else 30.0,
+            input_cost_per_1m_tokens=config.input_cost_per_1m_tokens or 0.0,
+            output_cost_per_1m_tokens=config.output_cost_per_1m_tokens or 0.0,
+            max_estimated_cost_usd=config.max_estimated_cost_usd,
         )
     raise ValueError("unsupported network update_policy type")

@@ -1,7 +1,7 @@
 import pytest
 
 from society_simulation.config import NetworkUpdatePolicyConfig
-from society_simulation.llm_policy import MockLLMPolicy
+from society_simulation.llm_policy import MockLLMPolicy, OpenAICompatibleLLMPolicy
 from society_simulation.network_models import NetworkObservation
 from society_simulation.network_policies import (
     DeGrootPolicy,
@@ -175,6 +175,38 @@ def test_policy_factory_builds_supported_policies() -> None:
         build_network_update_policy(NetworkUpdatePolicyConfig(type="mock_llm")),
         MockLLMPolicy,
     )
+
+
+def test_policy_factory_builds_openai_compatible_llm_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SOCIETY_SIM_TEST_LLM_API_KEY", "test-key")
+
+    policy = build_network_update_policy(
+        NetworkUpdatePolicyConfig(
+            type="llm",
+            provider="openai_compatible",
+            model="cheap-chat",
+            api_key_env="SOCIETY_SIM_TEST_LLM_API_KEY",
+            base_url="https://example.test/v1",
+            max_completion_tokens=12,
+            token_limit_parameter="max_tokens",
+        )
+    )
+
+    assert isinstance(policy, OpenAICompatibleLLMPolicy)
+
+
+def test_policy_factory_rejects_missing_real_llm_api_key() -> None:
+    with pytest.raises(ValueError, match="SOCIETY_SIM_MISSING_LLM_API_KEY is required"):
+        build_network_update_policy(
+            NetworkUpdatePolicyConfig(
+                type="llm",
+                provider="openai_compatible",
+                model="cheap-chat",
+                api_key_env="SOCIETY_SIM_MISSING_LLM_API_KEY",
+            )
+        )
 
 
 def test_policy_factory_rejects_unknown_policy() -> None:
