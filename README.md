@@ -34,6 +34,15 @@ python -m society_simulation run examples/network_herding_mock_llm.json
 
 The mock LLM path is deterministic and does not call any API. It records estimated prompt tokens, completion tokens, calls, and cost accounting in `metrics.json`; with the included mock config, API cost is `0`.
 
+OpenAI-compatible LLM network herding:
+
+```bash
+export SOCIETY_SIM_LLM_API_KEY="..."
+python -m society_simulation run examples/network_herding_openai_compatible.json
+```
+
+This path calls a real `/chat/completions` compatible API only when you run a config with `update_policy.type` set to `llm` and the configured `api_key_env` is present. Edit `base_url`, `model`, `token_limit_parameter`, and the per-1M-token price fields for your provider. The example uses 3 agents and 1 round with a small `max_estimated_cost_usd` cap so the first paid smoke test stays tiny.
+
 Network topology sweep:
 
 ```bash

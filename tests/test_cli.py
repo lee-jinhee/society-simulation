@@ -204,6 +204,18 @@ def test_example_mock_llm_network_config_exists_and_is_valid() -> None:
     assert config.update_policy.type == "mock_llm"
 
 
+def test_example_openai_compatible_network_config_exists_and_is_valid() -> None:
+    from society_simulation.config import NetworkHerdingConfig, load_config
+
+    config = load_config("examples/network_herding_openai_compatible.json")
+
+    assert isinstance(config, NetworkHerdingConfig)
+    assert config.experiment_name == "network_herding"
+    assert config.update_policy.type == "llm"
+    assert config.update_policy.provider == "openai_compatible"
+    assert config.update_policy.api_key_env == "SOCIETY_SIM_LLM_API_KEY"
+
+
 @pytest.mark.parametrize("error", [OSError("disk full"), ValueError("bad run")])
 def test_cli_run_runtime_failures_report_experiment_run_error(
     tmp_path: Path,

@@ -1,0 +1,34 @@
+{
+  "experiment_name": "network_herding",
+  "seed": 11,
+  "num_agents": 3,
+  "initial_opinion": {
+    "type": "bernoulli",
+    "probability_a": 0.5
+  },
+  "topology": {
+    "type": "cycle"
+  },
+  "scheduler": {
+    "type": "synchronous_rounds",
+    "rounds": 1
+  },
+  "observation_policy": {
+    "type": "neighbor_actions"
+  },
+  "update_policy": {
+    "type": "llm",
+    "provider": "openai_compatible",
+    "model": "gpt-5.4-mini",
+    "base_url": "https://api.openai.com/v1",
+    "api_key_env": "SOCIETY_SIM_LLM_API_KEY",
+    "temperature": 0.0,
+    "max_completion_tokens": 32,
+    "token_limit_parameter": "max_completion_tokens",
+    "timeout_seconds": 30.0,
+    "input_cost_per_1m_tokens": 10.0,
+    "output_cost_per_1m_tokens": 10.0,
+    "max_estimated_cost_usd": 0.02
+  },
+  "output_dir": "runs/network_herding_openai_compatible"
+}
