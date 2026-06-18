@@ -59,7 +59,29 @@ def test_write_sweep_artifacts_writes_manifest_csv_and_summary_json(
     assert json.loads(manifest_lines[2])["status"] == "pending"
 
     with paths.summary_csv_path.open(newline="", encoding="utf-8") as handle:
-        rows = list(csv.DictReader(handle))
+        reader = csv.DictReader(handle)
+        rows = list(reader)
+    assert reader.fieldnames == [
+        "run_id",
+        "seed",
+        "initial_a",
+        "topology",
+        "experiment_name",
+        "output_dir",
+        "status",
+        "error",
+        "final_action_counts_A",
+        "final_action_counts_B",
+        "final_a_fraction",
+        "consensus_reached",
+        "consensus_action",
+        "time_to_consensus",
+        "polarization_index",
+        "opinion_variance",
+        "mean_belief",
+        "edge_disagreement_rate",
+        "component_count",
+    ]
     assert rows[0]["run_id"] == planned_runs[0].run_id
     assert rows[0]["status"] == "completed"
     assert rows[0]["final_action_counts_A"] == "4"
@@ -97,3 +119,106 @@ def test_write_sweep_artifacts_writes_sweep_config_json(tmp_path: Path) -> None:
     paths = write_sweep_artifacts(sweep, planned_runs, records=())
 
     assert json.loads(paths.sweep_config_path.read_text(encoding="utf-8")) == sweep.to_dict()
+
+
+def test_write_sweep_artifacts_serializes_record_output_dir_paths(
+    tmp_path: Path,
+) -> None:
+    sweep = parse_sweep_config(valid_sweep_dict(tmp_path))
+    planned_runs = expand_sweep(sweep)
+    output_dir = Path(planned_runs[0].config["output_dir"])
+
+    paths = write_sweep_artifacts(
+        sweep,
+        planned_runs,
+        records=(
+            SweepRunRecord(
+                run_id=planned_runs[0].run_id,
+                labels=planned_runs[0].labels,
+                experiment_name="network_herding",
+                output_dir=output_dir,
+                status="completed",
+                error=None,
+                metrics={},
+            ),
+        ),
+    )
+
+    manifest_row = json.loads(paths.manifest_path.read_text(encoding="utf-8").splitlines()[0])
+    assert manifest_row["output_dir"] == str(output_dir)
+    assert isinstance(manifest_row["output_dir"], str)
+    with paths.summary_csv_path.open(newline="", encoding="utf-8") as handle:
+        csv_row = next(csv.DictReader(handle))
+    assert csv_row["output_dir"] == str(output_dir)
+
+
+def test_summary_metric_means_use_completed_rows_and_continuous_fields_only(
+    tmp_path: Path,
+) -> None:
+    sweep = parse_sweep_config(valid_sweep_dict(tmp_path))
+    planned_runs = expand_sweep(sweep)
+    records = (
+        SweepRunRecord(
+            run_id=planned_runs[0].run_id,
+            labels=planned_runs[0].labels,
+            experiment_name="network_herding",
+            output_dir=planned_runs[0].config["output_dir"],
+            status="completed",
+            error=None,
+            metrics={
+                "final_action_counts": {"A": 4, "B": 2},
+                "final_a_fraction": 0.75,
+                "consensus_reached": True,
+                "component_count": 1,
+            },
+        ),
+        SweepRunRecord(
+            run_id=planned_runs[1].run_id,
+            labels=planned_runs[1].labels,
+            experiment_name="network_herding",
+            output_dir=planned_runs[1].config["output_dir"],
+            status="failed",
+            error="boom",
+            metrics={
+                "final_action_counts": {"A": 100, "B": 100},
+                "final_a_fraction": 0.0,
+                "consensus_reached": False,
+                "component_count": 9,
+            },
+        ),
+    )
+
+    paths = write_sweep_artifacts(sweep, planned_runs, records)
+
+    summary = json.loads(paths.summary_json_path.read_text(encoding="utf-8"))
+    assert summary["metric_means"]["final_a_fraction"] == 0.75
+    assert summary["metric_means"]["component_count"] == 1.0
+    assert "consensus_reached" not in summary["metric_means"]
+    assert "final_action_counts_A" not in summary["metric_means"]
+    assert summary["groups"]["seed"]["1"]["metric_means"]["final_a_fraction"] == 0.75
+    assert summary["groups"]["seed"]["1"]["metric_means"]["component_count"] == 1.0
+
+
+def test_write_sweep_artifacts_accepts_action_counts_metric_fallback(
+    tmp_path: Path,
+) -> None:
+    sweep = parse_sweep_config(valid_sweep_dict(tmp_path))
+    planned_runs = expand_sweep(sweep)
+    records = (
+        SweepRunRecord(
+            run_id=planned_runs[0].run_id,
+            labels=planned_runs[0].labels,
+            experiment_name="network_herding",
+            output_dir=planned_runs[0].config["output_dir"],
+            status="completed",
+            error=None,
+            metrics={"action_counts": {"A": 1, "B": 2}},
+        ),
+    )
+
+    paths = write_sweep_artifacts(sweep, planned_runs, records)
+
+    with paths.summary_csv_path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows[0]["final_action_counts_A"] == "1"
+    assert rows[0]["final_action_counts_B"] == "2"

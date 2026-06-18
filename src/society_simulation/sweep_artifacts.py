@@ -4,6 +4,7 @@ from collections.abc import Iterable, Mapping
 import csv
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 
 from society_simulation.sweep_config import MaterializedRun, SweepConfig
@@ -14,6 +15,15 @@ METRIC_FIELDS = (
     "final_a_fraction",
     "consensus_reached",
     "consensus_action",
+    "time_to_consensus",
+    "polarization_index",
+    "opinion_variance",
+    "mean_belief",
+    "edge_disagreement_rate",
+    "component_count",
+)
+NUMERIC_MEAN_FIELDS = (
+    "final_a_fraction",
     "time_to_consensus",
     "polarization_index",
     "opinion_variance",
@@ -37,7 +47,7 @@ class SweepRunRecord:
     run_id: str
     labels: dict[str, str]
     experiment_name: str
-    output_dir: str
+    output_dir: str | os.PathLike[str]
     status: str
     error: str | None
     metrics: dict[str, object]
@@ -97,7 +107,7 @@ def _artifact_rows(
                 else str(planned_run.config["experiment_name"])
             ),
             "output_dir": (
-                record.output_dir
+                str(record.output_dir)
                 if record is not None
                 else str(planned_run.config["output_dir"])
             ),
@@ -197,9 +207,14 @@ def _labels(row: dict[str, object]) -> dict[str, str]:
 def _flatten_metrics(metrics: Mapping[str, object]) -> dict[str, object]:
     flattened = {field: None for field in METRIC_FIELDS}
     action_counts = metrics.get("final_action_counts")
-    if isinstance(action_counts, Mapping):
-        flattened["final_action_counts_A"] = action_counts.get("A")
-        flattened["final_action_counts_B"] = action_counts.get("B")
+    fallback_action_counts = metrics.get("action_counts")
+    if not isinstance(action_counts, Mapping):
+        action_counts = fallback_action_counts
+    for action in ("A", "B"):
+        value = action_counts.get(action) if isinstance(action_counts, Mapping) else None
+        if value is None and isinstance(fallback_action_counts, Mapping):
+            value = fallback_action_counts.get(action)
+        flattened[f"final_action_counts_{action}"] = value
     for field in METRIC_FIELDS:
         if field.startswith("final_action_counts_"):
             continue
@@ -209,8 +224,9 @@ def _flatten_metrics(metrics: Mapping[str, object]) -> dict[str, object]:
 
 def _metric_means(rows: list[dict[str, object]]) -> dict[str, float]:
     means: dict[str, float] = {}
-    for field in METRIC_FIELDS:
-        values = [_numeric_metric(row[field]) for row in rows]
+    completed_rows = [row for row in rows if row["status"] == "completed"]
+    for field in NUMERIC_MEAN_FIELDS:
+        values = [_numeric_metric(row[field]) for row in completed_rows]
         numeric_values = [value for value in values if value is not None]
         if numeric_values:
             means[field] = sum(numeric_values) / len(numeric_values)
@@ -219,7 +235,7 @@ def _metric_means(rows: list[dict[str, object]]) -> dict[str, float]:
 
 def _numeric_metric(value: object) -> float | None:
     if isinstance(value, bool):
-        return float(value)
+        return None
     if isinstance(value, (int, float)):
         return float(value)
     return None
