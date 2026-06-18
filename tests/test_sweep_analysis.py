@@ -1,6 +1,7 @@
 import csv
 from dataclasses import fields
 import json
+import math
 from pathlib import Path
 import re
 
@@ -221,6 +222,20 @@ def field_names(dataclass_type) -> tuple[str, ...]:
     return tuple(field.name for field in fields(dataclass_type))
 
 
+def read_manifest_entries(sweep_dir: Path) -> list[dict[str, object]]:
+    return [
+        json.loads(line)
+        for line in (sweep_dir / "manifest.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def write_manifest_entries(sweep_dir: Path, entries: list[dict[str, object]]) -> None:
+    with (sweep_dir / "manifest.jsonl").open("w", encoding="utf-8") as handle:
+        for entry in entries:
+            handle.write(json.dumps(entry, sort_keys=True) + "\n")
+
+
 def test_sweep_analysis_dataclasses_match_task_api() -> None:
     assert field_names(GroupSummary) == (
         "factor_name",
@@ -340,6 +355,76 @@ def test_analyze_sweep_wraps_malformed_manifest_json(tmp_path: Path) -> None:
     (sweep_dir / "manifest.jsonl").write_text("{not-json\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="malformed JSON artifact manifest\\.jsonl:"):
+        analyze_sweep(sweep_dir)
+
+
+def test_analyze_sweep_rejects_manifest_count_mismatch(tmp_path: Path) -> None:
+    sweep_dir = write_analysis_fixture(tmp_path)
+    entries = read_manifest_entries(sweep_dir)
+    write_manifest_entries(sweep_dir, entries[:-1])
+
+    with pytest.raises(
+        ValueError,
+        match="manifest\\.jsonl entry count 4 does not match summary\\.csv row count 5",
+    ):
+        analyze_sweep(sweep_dir)
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("run_id", "different-run"),
+        ("status", "failed"),
+        ("error", "changed error"),
+        ("output_dir", "/tmp/different-output"),
+    ],
+)
+def test_analyze_sweep_rejects_manifest_row_mismatch(
+    tmp_path: Path,
+    field: str,
+    replacement: str,
+) -> None:
+    sweep_dir = write_analysis_fixture(tmp_path)
+    entries = read_manifest_entries(sweep_dir)
+    run_id = str(entries[0]["run_id"])
+    entries[0][field] = replacement
+    write_manifest_entries(sweep_dir, entries)
+
+    with pytest.raises(
+        ValueError,
+        match=rf"manifest\.jsonl row 1 .*{field}.*{re.escape(run_id)}",
+    ):
+        analyze_sweep(sweep_dir)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda entry: entry.pop("run_id"),
+            "manifest.jsonl row 1 is missing required field: run_id",
+        ),
+        (
+            lambda entry: entry.update({"status": 123}),
+            "manifest.jsonl row 1 field status must be a string",
+        ),
+        (
+            lambda entry: entry.update({"error": 123}),
+            "manifest.jsonl row 1 field error must be a string or null",
+        ),
+    ],
+)
+def test_analyze_sweep_rejects_invalid_manifest_required_fields(
+    tmp_path: Path,
+    mutation,
+    message: str,
+) -> None:
+    sweep_dir = write_analysis_fixture(tmp_path)
+    entries = read_manifest_entries(sweep_dir)
+    mutation(entries[0])
+    write_manifest_entries(sweep_dir, entries)
+
+    with pytest.raises(ValueError, match=re.escape(message)):
         analyze_sweep(sweep_dir)
 
 
@@ -503,6 +588,26 @@ def test_analyze_sweep_ignores_unparsable_metric_cells_in_completed_rows(
 
     assert complete.mean_final_a_fraction == pytest.approx(0.9)
     assert complete.mean_polarization_index == pytest.approx(0.1)
+
+
+def test_analyze_sweep_ignores_non_finite_metric_cells(tmp_path: Path) -> None:
+    sweep_dir = write_analysis_fixture(tmp_path)
+    rows = list(csv.DictReader((sweep_dir / "summary.csv").open(newline="", encoding="utf-8")))
+    rows[0]["final_a_fraction"] = "nan"
+    rows[0]["polarization_index"] = "inf"
+    with (sweep_dir / "summary.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=SUMMARY_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    result = analyze_sweep(sweep_dir)
+    complete = group_by(result, "topology", "complete")
+
+    assert complete.mean_final_a_fraction == pytest.approx(0.9)
+    assert complete.mean_polarization_index == pytest.approx(0.1)
+    assert result.toplines["highest_polarization"].factor_name == "topology"
+    assert result.toplines["highest_polarization"].value == "cycle"
+    assert all(math.isfinite(topline.metric_value) for topline in result.toplines.values())
 
 
 def test_toplines_ignore_seed_when_non_seed_groups_have_metric_data(

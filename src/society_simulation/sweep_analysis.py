@@ -4,6 +4,7 @@ import csv
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,7 @@ GROUP_SUMMARY_METRICS = (
     "mean_opinion_variance",
     "mean_component_count",
 )
+MANIFEST_COMPARE_FIELDS = ("run_id", "status", "error", "output_dir")
 
 
 @dataclass(frozen=True)
@@ -135,12 +137,13 @@ def analyze_sweep(output_dir: str | Path) -> SweepAnalysisResult:
 
     sweep_config = _load_sweep_config(sweep_dir / "sweep_config.json")
     summary_json = _load_json(sweep_dir / "summary.json")
-    _load_manifest(sweep_dir / "manifest.jsonl")
+    manifest_entries = _load_manifest(sweep_dir / "manifest.jsonl")
     rows, fieldnames = _load_summary_csv(sweep_dir / "summary.csv")
 
     factor_names = tuple(factor.name for factor in sweep_config.factors)
     _validate_summary_columns(fieldnames, factor_names)
     _validate_summary_counts(rows, summary_json)
+    _validate_manifest_entries(manifest_entries, rows)
 
     group_summaries = _group_summaries(factor_names, rows)
     return SweepAnalysisResult(
@@ -251,6 +254,45 @@ def _validate_summary_counts(rows: list[dict[str, str]], summary_json: Mapping[s
                 f"summary.csv {status} count {actual_status_count} "
                 f"does not match summary.json {status} {expected_status_count}"
             )
+
+
+def _validate_manifest_entries(
+    entries: tuple[Mapping[str, Any], ...],
+    rows: list[dict[str, str]],
+) -> None:
+    if len(entries) != len(rows):
+        raise ValueError(
+            f"manifest.jsonl entry count {len(entries)} does not match summary.csv row count {len(rows)}"
+        )
+
+    for row_number, (entry, row) in enumerate(zip(entries, rows), start=1):
+        summary_run_id = row["run_id"]
+        for field in MANIFEST_COMPARE_FIELDS:
+            manifest_value = _manifest_field_value(entry, field, row_number)
+            summary_value = row[field] or ""
+            if manifest_value != summary_value:
+                raise ValueError(
+                    f"manifest.jsonl row {row_number} field {field} for run_id {summary_run_id} "
+                    f"does not match summary.csv: expected {summary_value!r}, got {manifest_value!r}"
+                )
+
+
+def _manifest_field_value(
+    entry: Mapping[str, Any],
+    field: str,
+    row_number: int,
+) -> str:
+    if field not in entry:
+        raise ValueError(f"manifest.jsonl row {row_number} is missing required field: {field}")
+    value = entry[field]
+    if field == "error" and value is None:
+        return ""
+    if not isinstance(value, str):
+        expected_type = "string or null" if field == "error" else "string"
+        raise ValueError(
+            f"manifest.jsonl row {row_number} field {field} must be a {expected_type}"
+        )
+    return value
 
 
 def _group_summaries(
@@ -391,15 +433,17 @@ def _parse_float(value: object) -> float | None:
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, (int, float)):
-        return float(value)
+        parsed = float(value)
+        return parsed if math.isfinite(parsed) else None
     if isinstance(value, str):
         stripped = value.strip()
         if not stripped:
             return None
         try:
-            return float(stripped)
+            parsed = float(stripped)
         except ValueError:
             return None
+        return parsed if math.isfinite(parsed) else None
     return None
 
 
@@ -414,4 +458,3 @@ def _parse_bool(value: object) -> bool | None:
     if normalized == "false":
         return False
     return None
-
