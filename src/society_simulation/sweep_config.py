@@ -12,6 +12,29 @@ from society_simulation.config import Config, ExperimentConfig, NetworkHerdingCo
 
 Scalar: TypeAlias = str | int | float | bool | None
 _FACTOR_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+_NETWORK_HERDING_KEYS = {
+    "experiment_name",
+    "seed",
+    "num_agents",
+    "initial_opinion",
+    "topology",
+    "scheduler",
+    "observation_policy",
+    "update_policy",
+    "output_dir",
+}
+_SEQUENTIAL_CASCADE_KEYS = {
+    "experiment_name",
+    "seed",
+    "num_agents",
+    "true_state",
+    "signal_accuracy",
+    "prior_probability",
+    "scheduler",
+    "observation_policy",
+    "update_policy",
+    "output_dir",
+}
 
 
 @dataclass(frozen=True)
@@ -105,7 +128,7 @@ def parse_sweep_config(data: object) -> SweepConfig:
     return sweep
 
 
-def expand_sweep(sweep: SweepConfig) -> list[MaterializedRun]:
+def expand_sweep(sweep: SweepConfig) -> tuple[MaterializedRun, ...]:
     runs: list[MaterializedRun] = []
     for values in product(*(factor.values for factor in sweep.factors)):
         config = deepcopy(sweep.base_config)
@@ -126,7 +149,7 @@ def expand_sweep(sweep: SweepConfig) -> list[MaterializedRun]:
         config["output_dir"] = str(Path(sweep.output_dir) / "runs" / run_id)
         build_experiment_config(config)
         runs.append(MaterializedRun(run_id=run_id, labels=labels, config=config))
-    return runs
+    return tuple(runs)
 
 
 def apply_path_override(config: dict[str, object], path: str, value: object) -> None:
@@ -149,8 +172,10 @@ def apply_path_override(config: dict[str, object], path: str, value: object) -> 
 
 def build_experiment_config(data: dict[str, object]) -> Config:
     if data.get("experiment_name") == "network_herding":
+        _reject_unknown_keys(data, allowed=_NETWORK_HERDING_KEYS, path="experiment config")
         config = NetworkHerdingConfig.from_dict(data)
     else:
+        _reject_unknown_keys(data, allowed=_SEQUENTIAL_CASCADE_KEYS, path="experiment config")
         config = ExperimentConfig(**data)
     config.validate()
     return config

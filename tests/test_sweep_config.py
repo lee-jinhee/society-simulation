@@ -77,6 +77,7 @@ def test_expand_sweep_creates_deterministic_run_ids_and_output_dirs(
 
     runs = expand_sweep(sweep)
 
+    assert isinstance(runs, tuple)
     assert len(runs) == 8
     assert runs[0].run_id == "seed-1__initial_a-0_45__topology-cycle"
     assert runs[0].labels == {
@@ -159,6 +160,52 @@ def test_load_sweep_config_rejects_missing_final_path_segment(tmp_path: Path) ->
     path.write_text(json.dumps(data), encoding="utf-8")
 
     with pytest.raises(ValueError, match=r"factor path topology\.typo does not exist"):
+        load_sweep_config(path)
+
+
+def test_load_sweep_config_rejects_unknown_base_experiment_key(tmp_path: Path) -> None:
+    data = valid_sweep_dict(tmp_path)
+    base_config = data["base_config"]
+    assert isinstance(base_config, dict)
+    base_config["toplogy"] = {"type": "complete"}
+    path = tmp_path / "unknown_base_key.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="experiment config contains unknown key toplogy"):
+        load_sweep_config(path)
+
+
+def test_load_sweep_config_rejects_factor_path_to_unknown_experiment_key(
+    tmp_path: Path,
+) -> None:
+    data = valid_sweep_dict(tmp_path)
+    base_config = data["base_config"]
+    assert isinstance(base_config, dict)
+    base_config["toplogy"] = {"type": "cycle"}
+    data["factors"] = [{"name": "typo_topology", "path": "toplogy.type", "values": ["complete"]}]
+    path = tmp_path / "unknown_path_key.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="experiment config contains unknown key toplogy"):
+        load_sweep_config(path)
+
+
+def test_load_sweep_config_rejects_override_bundle_unknown_experiment_key(
+    tmp_path: Path,
+) -> None:
+    data = valid_sweep_dict(tmp_path)
+    data["factors"] = [
+        {
+            "name": "typo_topology",
+            "values": [
+                {"label": "complete", "overrides": {"toplogy": {"type": "complete"}}}
+            ],
+        }
+    ]
+    path = tmp_path / "unknown_override_key.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="experiment config contains unknown key toplogy"):
         load_sweep_config(path)
 
 
