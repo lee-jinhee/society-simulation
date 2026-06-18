@@ -2,6 +2,7 @@ import csv
 from dataclasses import fields
 import json
 from pathlib import Path
+import re
 
 import pytest
 
@@ -299,6 +300,39 @@ def test_analyze_sweep_rejects_missing_required_file(tmp_path: Path) -> None:
         analyze_sweep(sweep_dir)
 
 
+def test_analyze_sweep_rejects_missing_output_directory(tmp_path: Path) -> None:
+    missing_dir = tmp_path / "missing-sweep"
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape(f"sweep output directory does not exist: {missing_dir}"),
+    ):
+        analyze_sweep(missing_dir)
+
+
+@pytest.mark.parametrize("artifact_name", ["sweep_config.json", "summary.json"])
+def test_analyze_sweep_wraps_malformed_json_artifacts(
+    tmp_path: Path,
+    artifact_name: str,
+) -> None:
+    sweep_dir = write_analysis_fixture(tmp_path)
+    (sweep_dir / artifact_name).write_text("{not-json", encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match=rf"malformed JSON artifact {re.escape(artifact_name)}:",
+    ):
+        analyze_sweep(sweep_dir)
+
+
+def test_analyze_sweep_wraps_malformed_manifest_json(tmp_path: Path) -> None:
+    sweep_dir = write_analysis_fixture(tmp_path)
+    (sweep_dir / "manifest.jsonl").write_text("{not-json\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="malformed JSON artifact manifest\\.jsonl:"):
+        analyze_sweep(sweep_dir)
+
+
 def test_analyze_sweep_rejects_summary_count_mismatch(tmp_path: Path) -> None:
     sweep_dir = write_analysis_fixture(tmp_path)
     (sweep_dir / "summary.json").write_text(
@@ -307,6 +341,31 @@ def test_analyze_sweep_rejects_summary_count_mismatch(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ValueError, match="summary.csv row count 5 does not match summary.json runs 99"):
+        analyze_sweep(sweep_dir)
+
+
+@pytest.mark.parametrize(
+    ("status", "expected", "actual"),
+    [("completed", 99, 3), ("failed", 99, 1)],
+)
+def test_analyze_sweep_rejects_summary_status_count_mismatch(
+    tmp_path: Path,
+    status: str,
+    expected: int,
+    actual: int,
+) -> None:
+    sweep_dir = write_analysis_fixture(tmp_path)
+    summary = {"sweep_name": "network_topology_sweep", "runs": 5, "completed": 3, "failed": 1}
+    summary[status] = expected
+    (sweep_dir / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            f"summary.csv {status} count {actual} "
+            f"does not match summary.json {status} {expected}"
+        ),
+    ):
         analyze_sweep(sweep_dir)
 
 
@@ -321,3 +380,26 @@ def test_analyze_sweep_rejects_missing_factor_column(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="summary.csv is missing required column: threshold"):
         analyze_sweep(sweep_dir)
+
+
+def test_analyze_sweep_allows_analysis_unused_summary_columns_to_be_absent(
+    tmp_path: Path,
+) -> None:
+    sweep_dir = write_analysis_fixture(tmp_path)
+    unused_fields = {
+        "final_action_counts_A",
+        "final_action_counts_B",
+        "consensus_action",
+        "mean_belief",
+    }
+    rows = list(csv.DictReader((sweep_dir / "summary.csv").open(newline="", encoding="utf-8")))
+    fieldnames = [field for field in SUMMARY_FIELDS if field not in unused_fields]
+    with (sweep_dir / "summary.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows({key: value for key, value in row.items() if key in fieldnames} for row in rows)
+
+    result = analyze_sweep(sweep_dir)
+
+    assert result.runs == 5
+    assert group_by(result, "topology", "complete").mean_final_a_fraction == pytest.approx(0.95)

@@ -14,16 +14,12 @@ REQUIRED_ARTIFACTS = (
     "summary.json",
     "manifest.jsonl",
 )
-METRIC_COLUMNS = (
-    "final_action_counts_A",
-    "final_action_counts_B",
+ANALYSIS_METRIC_COLUMNS = (
     "final_a_fraction",
     "consensus_reached",
-    "consensus_action",
     "time_to_consensus",
     "polarization_index",
     "opinion_variance",
-    "mean_belief",
     "edge_disagreement_rate",
     "component_count",
 )
@@ -120,6 +116,8 @@ class SweepAnalysisResult:
 
 def analyze_sweep(output_dir: str | Path) -> SweepAnalysisResult:
     sweep_dir = Path(output_dir)
+    if not sweep_dir.exists():
+        raise ValueError(f"sweep output directory does not exist: {sweep_dir}")
     _validate_required_artifacts(sweep_dir)
 
     sweep_config = _load_json(sweep_dir / "sweep_config.json")
@@ -153,7 +151,10 @@ def _validate_required_artifacts(sweep_dir: Path) -> None:
 
 
 def _load_json(path: Path) -> Mapping[str, Any]:
-    data = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"malformed JSON artifact {path.name}: {exc}") from exc
     if not isinstance(data, Mapping):
         raise ValueError(f"{path.name} root must be an object")
     return data
@@ -164,7 +165,10 @@ def _load_manifest(path: Path) -> tuple[Mapping[str, Any], ...]:
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
-        entry = json.loads(line)
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"malformed JSON artifact {path.name}: {exc}") from exc
         if not isinstance(entry, Mapping):
             raise ValueError("manifest.jsonl entries must be objects")
         entries.append(entry)
@@ -198,7 +202,7 @@ def _validate_summary_columns(fieldnames: list[str], factor_names: tuple[str, ..
         "output_dir",
         "status",
         "error",
-        *METRIC_COLUMNS,
+        *ANALYSIS_METRIC_COLUMNS,
     )
     for column in required_columns:
         if column not in fieldnames:
@@ -213,6 +217,17 @@ def _validate_summary_counts(rows: list[dict[str, str]], summary_json: Mapping[s
         raise ValueError(
             f"summary.csv row count {len(rows)} does not match summary.json runs {expected_runs}"
         )
+
+    for status in ("completed", "failed"):
+        expected_status_count = summary_json.get(status)
+        if isinstance(expected_status_count, bool) or not isinstance(expected_status_count, int):
+            raise ValueError(f"summary.json {status} must be an integer")
+        actual_status_count = _count_status(rows, status)
+        if actual_status_count != expected_status_count:
+            raise ValueError(
+                f"summary.csv {status} count {actual_status_count} "
+                f"does not match summary.json {status} {expected_status_count}"
+            )
 
 
 def _group_summaries(
