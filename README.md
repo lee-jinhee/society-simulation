@@ -30,6 +30,7 @@ Network topology sweep:
 
 ```bash
 python -m society_simulation sweep experiments/network_topology_sweep.json
+python -m society_simulation analyze runs/sweeps/network_topology_sweep
 ```
 
 Artifacts are written to `output_dir` in the config. Sequential cascade runs write:
@@ -55,6 +56,13 @@ Sweep runs write:
 - `summary.csv`
 - `summary.json`
 - `runs/<run_id>/...`
+
+Sweep analysis writes:
+
+- `analysis/report.md`
+- `analysis/group_summary.csv`
+- `analysis/group_summary.json`
+- `analysis/failure_summary.csv`
 
 ## Test
 

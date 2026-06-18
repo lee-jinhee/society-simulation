@@ -513,3 +513,30 @@ def test_example_network_topology_sweep_exists_and_is_valid() -> None:
 
     assert sweep.sweep_name == "network_topology_sweep"
     assert len(runs) == 48
+
+
+def test_analyze_command_accepts_real_network_topology_sweep(tmp_path: Path) -> None:
+    from society_simulation.sweep_analysis import analyze_sweep
+    from society_simulation.sweep_analysis_artifacts import write_analysis_artifacts
+    from society_simulation.sweep_config import expand_sweep, load_sweep_config
+    from society_simulation.sweep_runner import run_sweep
+
+    loaded_sweep = load_sweep_config("experiments/network_topology_sweep.json")
+    sweep = type(loaded_sweep)(
+        sweep_name=loaded_sweep.sweep_name,
+        base_config=loaded_sweep.base_config,
+        factors=loaded_sweep.factors,
+        output_dir=str(tmp_path / "network_topology_sweep"),
+    )
+
+    assert len(expand_sweep(sweep)) == 48
+
+    sweep_result = run_sweep(sweep)
+    analysis_result = analyze_sweep(sweep_result.output_dir)
+    artifact_paths = write_analysis_artifacts(analysis_result)
+
+    assert analysis_result.runs == 48
+    assert analysis_result.completed == 48
+    assert analysis_result.failed == 0
+    assert artifact_paths.report_path.exists()
+    assert artifact_paths.group_summary_csv_path.exists()
