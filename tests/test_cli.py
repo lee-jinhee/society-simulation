@@ -453,10 +453,11 @@ def test_cli_analyze_invalid_output_dir_reports_clean_error(
         cli.main(["analyze", str(missing)])
 
     assert exc_info.value.code == 2
-    captured = capsys.readouterr().err
-    assert "Analyze failed for" in captured
-    assert "sweep output directory does not exist" in captured
-    assert "Traceback" not in captured
+    captured = capsys.readouterr()
+    assert "Analyze failed for" in captured.err
+    assert "sweep output directory does not exist" in captured.err
+    assert "Traceback" not in captured.err
+    assert captured.out == ""
 
 
 def test_cli_analyze_missing_artifact_reports_clean_error(
@@ -472,10 +473,36 @@ def test_cli_analyze_missing_artifact_reports_clean_error(
         cli.main(["analyze", str(sweep_dir)])
 
     assert exc_info.value.code == 2
-    captured = capsys.readouterr().err
-    assert "Analyze failed for" in captured
-    assert "missing required sweep artifact: manifest.jsonl" in captured
-    assert "Traceback" not in captured
+    captured = capsys.readouterr()
+    assert "Analyze failed for" in captured.err
+    assert "missing required sweep artifact: manifest.jsonl" in captured.err
+    assert "Traceback" not in captured.err
+    assert captured.out == ""
+
+
+def test_cli_analyze_artifact_write_failure_reports_clean_error(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.test_sweep_analysis import write_analysis_fixture
+
+    sweep_dir = write_analysis_fixture(tmp_path)
+
+    def raise_write_error(_result: object) -> object:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(cli, "write_analysis_artifacts", raise_write_error)
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["analyze", str(sweep_dir)])
+
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "Analyze failed for" in captured.err
+    assert "disk full" in captured.err
+    assert "Traceback" not in captured.err
+    assert captured.out == ""
 
 
 def test_example_network_topology_sweep_exists_and_is_valid() -> None:
