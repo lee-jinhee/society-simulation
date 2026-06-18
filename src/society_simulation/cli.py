@@ -6,6 +6,8 @@ from typing import Sequence
 
 from society_simulation.config import load_config
 from society_simulation.runner import run_experiment
+from society_simulation.sweep_analysis import analyze_sweep
+from society_simulation.sweep_analysis_artifacts import write_analysis_artifacts
 from society_simulation.sweep_config import load_sweep_config
 from society_simulation.sweep_runner import run_sweep
 
@@ -23,6 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("run").add_argument("config")
     subparsers.add_parser("sweep").add_argument("config")
+    subparsers.add_parser("analyze").add_argument("sweep_output_dir")
 
     return parser
 
@@ -84,6 +87,23 @@ def _run_sweep_config(parser: argparse.ArgumentParser, config_path: str) -> int:
     return 0
 
 
+def _run_analyze_config(parser: argparse.ArgumentParser, sweep_output_dir: str) -> int:
+    try:
+        result = analyze_sweep(sweep_output_dir)
+        paths = write_analysis_artifacts(result)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        parser.error(f"Analyze failed for '{sweep_output_dir}': {exc}")
+
+    print(f"analysis={result.sweep_name}")
+    print(f"runs={result.runs}")
+    print(f"completed={result.completed}")
+    print(f"failed={result.failed}")
+    print(f"output_dir={paths.output_dir}")
+    print(f"report={paths.report_path}")
+
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
@@ -91,4 +111,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_single_config(parser, args.config)
     if args.command == "sweep":
         return _run_sweep_config(parser, args.config)
+    if args.command == "analyze":
+        return _run_analyze_config(parser, args.sweep_output_dir)
     return 1

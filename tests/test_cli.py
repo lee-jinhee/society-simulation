@@ -417,6 +417,67 @@ def test_cli_sweep_runtime_failures_report_clean_error(
     assert "summary_csv=" not in captured.out
 
 
+def test_cli_analyze_writes_report_and_prints_summary(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from tests.test_sweep_analysis import write_analysis_fixture
+
+    sweep_dir = write_analysis_fixture(tmp_path)
+
+    exit_code = cli.main(["analyze", str(sweep_dir)])
+
+    assert exit_code == 0
+    output = capsys.readouterr().out.splitlines()
+    assert output == [
+        "analysis=network_topology_sweep",
+        "runs=5",
+        "completed=3",
+        "failed=1",
+        f"output_dir={sweep_dir / 'analysis'}",
+        f"report={sweep_dir / 'analysis' / 'report.md'}",
+    ]
+    assert (sweep_dir / "analysis" / "report.md").exists()
+    assert (sweep_dir / "analysis" / "group_summary.csv").exists()
+    assert (sweep_dir / "analysis" / "group_summary.json").exists()
+    assert (sweep_dir / "analysis" / "failure_summary.csv").exists()
+
+
+def test_cli_analyze_invalid_output_dir_reports_clean_error(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    missing = tmp_path / "missing-sweep-output"
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["analyze", str(missing)])
+
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr().err
+    assert "Analyze failed for" in captured
+    assert "sweep output directory does not exist" in captured
+    assert "Traceback" not in captured
+
+
+def test_cli_analyze_missing_artifact_reports_clean_error(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from tests.test_sweep_analysis import write_analysis_fixture
+
+    sweep_dir = write_analysis_fixture(tmp_path)
+    (sweep_dir / "manifest.jsonl").unlink()
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["analyze", str(sweep_dir)])
+
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr().err
+    assert "Analyze failed for" in captured
+    assert "missing required sweep artifact: manifest.jsonl" in captured
+    assert "Traceback" not in captured
+
+
 def test_example_network_topology_sweep_exists_and_is_valid() -> None:
     from society_simulation.sweep_config import expand_sweep, load_sweep_config
 
