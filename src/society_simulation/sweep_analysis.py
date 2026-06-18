@@ -32,7 +32,6 @@ NUMERIC_MEAN_FIELDS = (
     "time_to_consensus",
     "polarization_index",
     "opinion_variance",
-    "mean_belief",
     "edge_disagreement_rate",
     "component_count",
 )
@@ -47,40 +46,73 @@ class GroupSummary:
     failed: int
     consensus_rate: float | None
     mean_final_a_fraction: float | None
-    mean_time_to_consensus: float | None
     mean_polarization_index: float | None
-    mean_opinion_variance: float | None
-    mean_belief: float | None
     mean_edge_disagreement_rate: float | None
+    mean_time_to_consensus: float | None
+    mean_opinion_variance: float | None
     mean_component_count: float | None
-    metric_means: Mapping[str, float]
+
+    def metric(self, name: str) -> float | None:
+        return getattr(self, name)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "factor_name": self.factor_name,
+            "value": self.value,
+            "runs": self.runs,
+            "completed": self.completed,
+            "failed": self.failed,
+            "consensus_rate": self.consensus_rate,
+            "mean_final_a_fraction": self.mean_final_a_fraction,
+            "mean_polarization_index": self.mean_polarization_index,
+            "mean_edge_disagreement_rate": self.mean_edge_disagreement_rate,
+            "mean_time_to_consensus": self.mean_time_to_consensus,
+            "mean_opinion_variance": self.mean_opinion_variance,
+            "mean_component_count": self.mean_component_count,
+        }
 
 
 @dataclass(frozen=True)
 class IncompleteRun:
     run_id: str
     status: str
-    error: str | None
-    factor_values: Mapping[str, str]
-    output_dir: Path | None
+    error: str
+    output_dir: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "run_id": self.run_id,
+            "status": self.status,
+            "error": self.error,
+            "output_dir": self.output_dir,
+        }
 
 
 @dataclass(frozen=True)
 class ToplineEntry:
-    metric_name: str
+    name: str
     factor_name: str
     value: str
     metric_value: float
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "factor_name": self.factor_name,
+            "value": self.value,
+            "metric_value": self.metric_value,
+        }
 
 
 @dataclass(frozen=True)
 class SweepAnalysisResult:
     sweep_name: str
+    source_dir: Path
+    analysis_dir: Path
     runs: int
     completed: int
     failed: int
-    output_dir: Path
-    analysis_dir: Path
+    factor_names: tuple[str, ...]
     group_summaries: tuple[GroupSummary, ...]
     toplines: dict[str, ToplineEntry]
     incomplete_runs: tuple[IncompleteRun, ...]
@@ -102,14 +134,15 @@ def analyze_sweep(output_dir: str | Path) -> SweepAnalysisResult:
     group_summaries = _group_summaries(factor_names, rows)
     return SweepAnalysisResult(
         sweep_name=_sweep_name(sweep_config, summary_json, sweep_dir),
+        source_dir=sweep_dir,
+        analysis_dir=sweep_dir / "analysis",
         runs=len(rows),
         completed=_count_status(rows, "completed"),
         failed=_count_status(rows, "failed"),
-        output_dir=sweep_dir,
-        analysis_dir=sweep_dir / "analysis",
+        factor_names=factor_names,
         group_summaries=tuple(group_summaries),
         toplines=_toplines(group_summaries),
-        incomplete_runs=_incomplete_runs(factor_names, rows),
+        incomplete_runs=_incomplete_runs(rows),
     )
 
 
@@ -210,13 +243,11 @@ def _group_summary(
         failed=_count_status(rows, "failed"),
         consensus_rate=_consensus_rate(rows),
         mean_final_a_fraction=metric_means.get("final_a_fraction"),
-        mean_time_to_consensus=metric_means.get("time_to_consensus"),
         mean_polarization_index=metric_means.get("polarization_index"),
-        mean_opinion_variance=metric_means.get("opinion_variance"),
-        mean_belief=metric_means.get("mean_belief"),
         mean_edge_disagreement_rate=metric_means.get("edge_disagreement_rate"),
+        mean_time_to_consensus=metric_means.get("time_to_consensus"),
+        mean_opinion_variance=metric_means.get("opinion_variance"),
         mean_component_count=metric_means.get("component_count"),
-        metric_means=metric_means,
     )
 
 
@@ -247,7 +278,7 @@ def _toplines(group_summaries: list[GroupSummary]) -> dict[str, ToplineEntry]:
     toplines: dict[str, ToplineEntry] = {}
     consensus = _highest_topline(
         group_summaries,
-        metric_name="consensus_rate",
+        name="highest_consensus_rate",
         metric_value=lambda group: group.consensus_rate,
     )
     if consensus is not None:
@@ -255,17 +286,25 @@ def _toplines(group_summaries: list[GroupSummary]) -> dict[str, ToplineEntry]:
 
     polarization = _highest_topline(
         group_summaries,
-        metric_name="polarization_index",
+        name="highest_polarization",
         metric_value=lambda group: group.mean_polarization_index,
     )
     if polarization is not None:
         toplines["highest_polarization"] = polarization
+
+    edge_disagreement = _highest_topline(
+        group_summaries,
+        name="highest_edge_disagreement",
+        metric_value=lambda group: group.mean_edge_disagreement_rate,
+    )
+    if edge_disagreement is not None:
+        toplines["highest_edge_disagreement"] = edge_disagreement
     return toplines
 
 
 def _highest_topline(
     group_summaries: list[GroupSummary],
-    metric_name: str,
+    name: str,
     metric_value: Callable[[GroupSummary], float | None],
 ) -> ToplineEntry | None:
     candidates = [
@@ -283,29 +322,24 @@ def _highest_topline(
 
     group, value = max(candidates, key=lambda item: item[1])
     return ToplineEntry(
-        metric_name=metric_name,
+        name=name,
         factor_name=group.factor_name,
         value=group.value,
         metric_value=value,
     )
 
 
-def _incomplete_runs(
-    factor_names: tuple[str, ...],
-    rows: list[dict[str, str]],
-) -> tuple[IncompleteRun, ...]:
+def _incomplete_runs(rows: list[dict[str, str]]) -> tuple[IncompleteRun, ...]:
     incomplete: list[IncompleteRun] = []
     for row in rows:
         if row["status"] == "completed":
             continue
-        output_dir = Path(row["output_dir"]) if row["output_dir"] else None
         incomplete.append(
             IncompleteRun(
                 run_id=row["run_id"],
                 status=row["status"],
-                error=row["error"] or None,
-                factor_values={name: row[name] for name in factor_names},
-                output_dir=output_dir,
+                error=row["error"] or "",
+                output_dir=row["output_dir"] or "",
             )
         )
     return tuple(incomplete)

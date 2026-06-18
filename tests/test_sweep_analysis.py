@@ -1,10 +1,17 @@
 import csv
+from dataclasses import fields
 import json
 from pathlib import Path
 
 import pytest
 
-from society_simulation.sweep_analysis import analyze_sweep
+from society_simulation.sweep_analysis import (
+    GroupSummary,
+    IncompleteRun,
+    SweepAnalysisResult,
+    ToplineEntry,
+    analyze_sweep,
+)
 
 
 SUMMARY_FIELDS = [
@@ -199,16 +206,53 @@ def group_by(result, factor_name: str, value: str):
     raise AssertionError(f"group not found: {factor_name}={value}")
 
 
+def field_names(dataclass_type) -> tuple[str, ...]:
+    return tuple(field.name for field in fields(dataclass_type))
+
+
+def test_sweep_analysis_dataclasses_match_task_api() -> None:
+    assert field_names(GroupSummary) == (
+        "factor_name",
+        "value",
+        "runs",
+        "completed",
+        "failed",
+        "consensus_rate",
+        "mean_final_a_fraction",
+        "mean_polarization_index",
+        "mean_edge_disagreement_rate",
+        "mean_time_to_consensus",
+        "mean_opinion_variance",
+        "mean_component_count",
+    )
+    assert field_names(IncompleteRun) == ("run_id", "status", "error", "output_dir")
+    assert field_names(ToplineEntry) == ("name", "factor_name", "value", "metric_value")
+    assert field_names(SweepAnalysisResult) == (
+        "sweep_name",
+        "source_dir",
+        "analysis_dir",
+        "runs",
+        "completed",
+        "failed",
+        "factor_names",
+        "group_summaries",
+        "toplines",
+        "incomplete_runs",
+    )
+
+
 def test_analyze_sweep_computes_grouped_metrics_and_toplines(tmp_path: Path) -> None:
     sweep_dir = write_analysis_fixture(tmp_path)
 
     result = analyze_sweep(sweep_dir)
 
     assert result.sweep_name == "network_topology_sweep"
+    assert result.source_dir == sweep_dir
     assert result.runs == 5
     assert result.completed == 3
     assert result.failed == 1
     assert result.analysis_dir == sweep_dir / "analysis"
+    assert result.factor_names == ("seed", "topology", "threshold")
 
     complete = group_by(result, "topology", "complete")
     assert complete.runs == 2
@@ -219,6 +263,8 @@ def test_analyze_sweep_computes_grouped_metrics_and_toplines(tmp_path: Path) -> 
     assert complete.mean_polarization_index == pytest.approx(0.05)
     assert complete.mean_edge_disagreement_rate == pytest.approx(0.025)
     assert complete.mean_time_to_consensus == pytest.approx(1.5)
+    assert complete.metric("mean_final_a_fraction") == pytest.approx(0.95)
+    assert complete.to_dict()["factor_name"] == "topology"
 
     cycle = group_by(result, "topology", "cycle")
     assert cycle.runs == 3
@@ -238,7 +284,11 @@ def test_analyze_sweep_computes_grouped_metrics_and_toplines(tmp_path: Path) -> 
     assert result.toplines["highest_consensus_rate"].value == "complete"
     assert result.toplines["highest_polarization"].factor_name == "topology"
     assert result.toplines["highest_polarization"].value == "cycle"
+    assert "highest_edge_disagreement" in result.toplines
+    assert result.toplines["highest_edge_disagreement"].name == "highest_edge_disagreement"
+    assert result.toplines["highest_edge_disagreement"].value == "cycle"
     assert [run.status for run in result.incomplete_runs] == ["failed", "pending"]
+    assert result.incomplete_runs[0].to_dict()["error"] == "boom"
 
 
 def test_analyze_sweep_rejects_missing_required_file(tmp_path: Path) -> None:
