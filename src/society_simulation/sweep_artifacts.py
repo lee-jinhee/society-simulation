@@ -79,7 +79,7 @@ def write_sweep_artifacts(
 
     rows = _artifact_rows(sweep, planned_runs, records)
     paths.sweep_config_path.write_text(
-        json.dumps(sweep.to_dict(), indent=2) + "\n",
+        json.dumps(sweep.to_dict(), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     _write_manifest(paths.manifest_path, rows)

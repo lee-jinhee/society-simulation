@@ -118,7 +118,9 @@ def test_write_sweep_artifacts_writes_sweep_config_json(tmp_path: Path) -> None:
 
     paths = write_sweep_artifacts(sweep, planned_runs, records=())
 
-    assert json.loads(paths.sweep_config_path.read_text(encoding="utf-8")) == sweep.to_dict()
+    text = paths.sweep_config_path.read_text(encoding="utf-8")
+    assert json.loads(text) == sweep.to_dict()
+    assert text.splitlines()[1] == '  "base_config": {'
 
 
 def test_write_sweep_artifacts_serializes_record_output_dir_paths(
