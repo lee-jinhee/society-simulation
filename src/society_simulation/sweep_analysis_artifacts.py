@@ -173,7 +173,7 @@ def _write_group_summary_json(path: Path, result: SweepAnalysisResult) -> None:
         "runs": result.runs,
         "completed": result.completed,
         "failed": result.failed,
-        "groups": [group.to_dict() for group in result.group_summaries],
+        "groups": _json_groups(result),
         "toplines": {
             name: topline.to_dict()
             for name, topline in result.toplines.items()
@@ -189,6 +189,13 @@ def _write_failure_summary_csv(path: Path, result: SweepAnalysisResult) -> None:
         writer.writeheader()
         for incomplete_run in result.incomplete_runs:
             writer.writerow(incomplete_run.to_dict())
+
+
+def _json_groups(result: SweepAnalysisResult) -> dict[str, dict[str, dict[str, object]]]:
+    groups: dict[str, dict[str, dict[str, object]]] = {}
+    for group in result.group_summaries:
+        groups.setdefault(group.factor_name, {})[group.value] = group.to_dict()
+    return groups
 
 
 def _topline_report_line(result: SweepAnalysisResult, topline_name: str) -> str:

@@ -160,11 +160,12 @@ def test_group_summary_json_contains_native_values_from_analysis_result(
     assert payload["runs"] == 5
     assert payload["completed"] == 3
     assert payload["failed"] == 1
-    assert payload["groups"][0]["factor_name"] == "seed"
-    assert payload["groups"][0]["value"] == "1"
-    assert payload["groups"][0]["consensus_rate"] == 0.5
-    assert payload["groups"][3]["factor_name"] == "topology"
-    assert payload["groups"][3]["mean_time_to_consensus"] is None
+    assert payload["groups"]["seed"]["1"]["factor_name"] == "seed"
+    assert payload["groups"]["seed"]["1"]["value"] == "1"
+    assert payload["groups"]["seed"]["1"]["consensus_rate"] == 0.5
+    assert payload["groups"]["topology"]["complete"]["consensus_rate"] == 1.0
+    assert payload["groups"]["topology"]["cycle"]["factor_name"] == "topology"
+    assert payload["groups"]["topology"]["cycle"]["mean_time_to_consensus"] is None
     assert payload["toplines"]["highest_consensus_rate"] == {
         "name": "highest_consensus_rate",
         "factor_name": "topology",
