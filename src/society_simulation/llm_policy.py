@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 import json
 from math import ceil, isfinite
+import urllib.error
+import urllib.request
 from typing import Literal, cast
 
 from society_simulation.models import Action
@@ -10,8 +13,14 @@ from society_simulation.network_models import NetworkDecision, NetworkObservatio
 from society_simulation.policies import confidence_from_belief
 
 MockResponseStyle = Literal["neighbor_majority", "current", "contrarian"]
+TokenLimitParameter = Literal["max_completion_tokens", "max_tokens"]
+JSONTransport = Callable[
+    [str, dict[str, str], dict[str, object], float],
+    dict[str, object],
+]
 
 MOCK_RESPONSE_STYLES: tuple[str, ...] = ("neighbor_majority", "current", "contrarian")
+TOKEN_LIMIT_PARAMETERS: tuple[str, ...] = ("max_completion_tokens", "max_tokens")
 
 
 def estimate_tokens(text: str) -> int:
@@ -26,6 +35,20 @@ def _require_non_negative_finite_number(value: float, field_name: str) -> float:
     if value < 0:
         raise ValueError(f"{field_name} must be a non-negative finite number")
     return float(value)
+
+
+def _require_positive_finite_number(value: float, field_name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value):
+        raise ValueError(f"{field_name} must be a positive finite number")
+    if value <= 0:
+        raise ValueError(f"{field_name} must be a positive finite number")
+    return float(value)
+
+
+def _require_positive_int(value: int, field_name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{field_name} must be a positive integer")
+    return value
 
 
 def _validate_probability(value: float, field_name: str) -> float:
@@ -248,3 +271,291 @@ class MockLLMPolicy:
             f"neighbors={neighbors}\n"
             "Return JSON with action A or B and belief_probability in [0,1]."
         )
+
+
+def _urllib_json_transport(
+    url: str,
+    headers: dict[str, str],
+    payload: dict[str, object],
+    timeout_seconds: float,
+) -> dict[str, object]:
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=body,
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            response_body = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        raise ValueError(
+            f"llm provider request failed with HTTP {exc.code}: {error_body}"
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise ValueError(f"llm provider request failed: {exc.reason}") from exc
+
+    try:
+        data = json.loads(response_body)
+    except json.JSONDecodeError as exc:
+        raise ValueError("llm provider returned malformed JSON") from exc
+    if not isinstance(data, dict):
+        raise ValueError("llm provider response must be a JSON object")
+    return data
+
+
+class OpenAICompatibleClient:
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        timeout_seconds: float,
+        transport: JSONTransport = _urllib_json_transport,
+    ) -> None:
+        if not base_url:
+            raise ValueError("base_url must be a non-empty string")
+        if not api_key:
+            raise ValueError("api key is required")
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.timeout_seconds = _require_positive_finite_number(
+            timeout_seconds,
+            "timeout_seconds",
+        )
+        self.transport = transport
+
+    def create_chat_completion(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, str]],
+        temperature: float,
+        max_completion_tokens: int,
+        token_limit_parameter: str,
+    ) -> dict[str, object]:
+        if not model:
+            raise ValueError("model must be a non-empty string")
+        if token_limit_parameter not in TOKEN_LIMIT_PARAMETERS:
+            raise ValueError("token_limit_parameter must be max_completion_tokens or max_tokens")
+
+        payload: dict[str, object] = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            token_limit_parameter: max_completion_tokens,
+        }
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        return self.transport(
+            f"{self.base_url}/chat/completions",
+            headers,
+            payload,
+            self.timeout_seconds,
+        )
+
+
+def _llm_system_message() -> str:
+    return (
+        "You are simulating one agent in a network herding experiment. "
+        "Return only compact JSON with keys action and belief_probability. "
+        "action must be A or B. belief_probability must be between 0 and 1."
+    )
+
+
+def _llm_user_message(observation: NetworkObservation) -> str:
+    neighbor_rows = [
+        f"id={agent_id},action={action},belief={belief:.6f}"
+        for agent_id, action, belief in zip(
+            observation.observed_neighbor_ids,
+            observation.observed_neighbor_actions,
+            observation.observed_neighbor_beliefs,
+            strict=True,
+        )
+    ]
+    neighbors = ";".join(neighbor_rows) if neighbor_rows else "none"
+    return (
+        f"agent_id={observation.agent_id}\n"
+        f"round_index={observation.round_index}\n"
+        f"current_action={observation.current_action}\n"
+        f"current_belief={observation.current_belief_probability:.6f}\n"
+        f"neighbors={neighbors}\n"
+        "Decide the next action and belief_probability."
+    )
+
+
+def _messages_text(messages: list[dict[str, str]]) -> str:
+    return "\n".join(f"{message['role']}:{message['content']}" for message in messages)
+
+
+def _extract_choice_content(response: dict[str, object]) -> str:
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise ValueError("llm response is missing choices[0].message.content")
+    first_choice = choices[0]
+    if not isinstance(first_choice, dict):
+        raise ValueError("llm response is missing choices[0].message.content")
+    message = first_choice.get("message")
+    if not isinstance(message, dict):
+        raise ValueError("llm response is missing choices[0].message.content")
+    content = message.get("content")
+    if not isinstance(content, str) or not content:
+        raise ValueError("llm response is missing choices[0].message.content")
+    return content
+
+
+def _parse_llm_decision_content(content: str) -> tuple[Action, float]:
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise ValueError("llm response content must be JSON") from exc
+    if not isinstance(data, dict):
+        raise ValueError("llm response content must be a JSON object")
+    if "action" not in data:
+        raise ValueError("llm response content must include action")
+    if "belief_probability" not in data:
+        raise ValueError("llm response content must include belief_probability")
+    action_value = data["action"]
+    if not isinstance(action_value, str):
+        raise ValueError("action must be A or B")
+    belief_value = data["belief_probability"]
+    if not isinstance(belief_value, (int, float)):
+        raise ValueError("belief_probability must be between 0 and 1")
+    return (
+        _validate_action(action_value),
+        _validate_probability(float(belief_value), "belief_probability"),
+    )
+
+
+def _response_usage_tokens(
+    response: dict[str, object],
+    *,
+    default_prompt_tokens: int,
+    default_completion_tokens: int,
+) -> tuple[int, int]:
+    usage = response.get("usage")
+    if not isinstance(usage, dict):
+        return default_prompt_tokens, default_completion_tokens
+
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    if isinstance(prompt_tokens, bool) or not isinstance(prompt_tokens, int) or prompt_tokens < 0:
+        prompt_tokens = default_prompt_tokens
+    if (
+        isinstance(completion_tokens, bool)
+        or not isinstance(completion_tokens, int)
+        or completion_tokens < 0
+    ):
+        completion_tokens = default_completion_tokens
+    return prompt_tokens, completion_tokens
+
+
+class OpenAICompatibleLLMPolicy:
+    name = "llm"
+
+    def __init__(
+        self,
+        *,
+        model: str,
+        api_key: str,
+        provider: str = "openai_compatible",
+        base_url: str = "https://api.openai.com/v1",
+        temperature: float = 0.0,
+        max_completion_tokens: int = 32,
+        token_limit_parameter: str = "max_completion_tokens",
+        timeout_seconds: float = 30.0,
+        input_cost_per_1m_tokens: float = 0.0,
+        output_cost_per_1m_tokens: float = 0.0,
+        max_estimated_cost_usd: float | None = None,
+        transport: JSONTransport = _urllib_json_transport,
+    ) -> None:
+        if provider != "openai_compatible":
+            raise ValueError("unsupported llm provider")
+        if not model:
+            raise ValueError("model must be a non-empty string")
+        if isinstance(temperature, bool) or not isinstance(temperature, (int, float)):
+            raise ValueError("temperature must be between 0 and 2")
+        if not isfinite(temperature) or not 0.0 <= float(temperature) <= 2.0:
+            raise ValueError("temperature must be between 0 and 2")
+        if token_limit_parameter not in TOKEN_LIMIT_PARAMETERS:
+            raise ValueError("token_limit_parameter must be max_completion_tokens or max_tokens")
+
+        self.provider = provider
+        self.model = model
+        self.temperature = float(temperature)
+        self.max_completion_tokens = _require_positive_int(
+            max_completion_tokens,
+            "max_completion_tokens",
+        )
+        self.token_limit_parameter = token_limit_parameter
+        self.pricing = LLMPricing(
+            input_cost_per_1m_tokens=input_cost_per_1m_tokens,
+            output_cost_per_1m_tokens=output_cost_per_1m_tokens,
+        )
+        self.max_estimated_cost_usd = (
+            None
+            if max_estimated_cost_usd is None
+            else _require_non_negative_finite_number(
+                max_estimated_cost_usd,
+                "max_estimated_cost_usd",
+            )
+        )
+        self.usage = LLMUsage()
+        self._client = OpenAICompatibleClient(
+            base_url=base_url,
+            api_key=api_key,
+            timeout_seconds=timeout_seconds,
+            transport=transport,
+        )
+
+    def decide(self, observation: NetworkObservation) -> NetworkDecision:
+        _validate_observation(observation)
+        messages = [
+            {"role": "system", "content": _llm_system_message()},
+            {"role": "user", "content": _llm_user_message(observation)},
+        ]
+        prompt_tokens_estimate = estimate_tokens(_messages_text(messages))
+        self._raise_if_cost_cap_exceeded(
+            self.usage.input_cost_usd
+            + self.usage.output_cost_usd
+            + self.pricing.input_cost(prompt_tokens_estimate)
+        )
+
+        response = self._client.create_chat_completion(
+            model=self.model,
+            messages=messages,
+            temperature=self.temperature,
+            max_completion_tokens=self.max_completion_tokens,
+            token_limit_parameter=self.token_limit_parameter,
+        )
+        content = _extract_choice_content(response)
+        action, belief = _parse_llm_decision_content(content)
+        prompt_tokens, completion_tokens = _response_usage_tokens(
+            response,
+            default_prompt_tokens=prompt_tokens_estimate,
+            default_completion_tokens=estimate_tokens(content),
+        )
+        self.usage.record(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            pricing=self.pricing,
+        )
+        self._raise_if_cost_cap_exceeded(self.usage.input_cost_usd + self.usage.output_cost_usd)
+        return NetworkDecision(
+            belief_probability=belief,
+            confidence=confidence_from_belief(belief),
+            action=action,
+        )
+
+    def usage_summary(self) -> dict[str, object]:
+        return self.usage.summary(provider=self.provider, model=self.model)
+
+    def _raise_if_cost_cap_exceeded(self, estimated_cost_usd: float) -> None:
+        if self.max_estimated_cost_usd is None:
+            return
+        if estimated_cost_usd > self.max_estimated_cost_usd:
+            raise ValueError("llm estimated cost cap exceeded")
