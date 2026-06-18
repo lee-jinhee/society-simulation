@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from society_simulation.sweep_config import SweepConfig, parse_sweep_config
+
 
 REQUIRED_ARTIFACTS = (
     "sweep_config.json",
@@ -31,6 +33,15 @@ NUMERIC_MEAN_FIELDS = (
     "edge_disagreement_rate",
     "component_count",
 )
+GROUP_SUMMARY_METRICS = (
+    "consensus_rate",
+    "mean_final_a_fraction",
+    "mean_polarization_index",
+    "mean_edge_disagreement_rate",
+    "mean_time_to_consensus",
+    "mean_opinion_variance",
+    "mean_component_count",
+)
 
 
 @dataclass(frozen=True)
@@ -49,6 +60,8 @@ class GroupSummary:
     mean_component_count: float | None
 
     def metric(self, name: str) -> float | None:
+        if name not in GROUP_SUMMARY_METRICS:
+            raise ValueError(f"unknown group summary metric: {name}")
         return getattr(self, name)
 
     def to_dict(self) -> dict[str, object]:
@@ -120,18 +133,18 @@ def analyze_sweep(output_dir: str | Path) -> SweepAnalysisResult:
         raise ValueError(f"sweep output directory does not exist: {sweep_dir}")
     _validate_required_artifacts(sweep_dir)
 
-    sweep_config = _load_json(sweep_dir / "sweep_config.json")
+    sweep_config = _load_sweep_config(sweep_dir / "sweep_config.json")
     summary_json = _load_json(sweep_dir / "summary.json")
     _load_manifest(sweep_dir / "manifest.jsonl")
     rows, fieldnames = _load_summary_csv(sweep_dir / "summary.csv")
 
-    factor_names = _factor_names(sweep_config)
+    factor_names = tuple(factor.name for factor in sweep_config.factors)
     _validate_summary_columns(fieldnames, factor_names)
     _validate_summary_counts(rows, summary_json)
 
     group_summaries = _group_summaries(factor_names, rows)
     return SweepAnalysisResult(
-        sweep_name=_sweep_name(sweep_config, summary_json, sweep_dir),
+        sweep_name=sweep_config.sweep_name,
         source_dir=sweep_dir,
         analysis_dir=sweep_dir / "analysis",
         runs=len(rows),
@@ -160,6 +173,14 @@ def _load_json(path: Path) -> Mapping[str, Any]:
     return data
 
 
+def _load_sweep_config(path: Path) -> SweepConfig:
+    data = _load_json(path)
+    try:
+        return parse_sweep_config(data)
+    except ValueError as exc:
+        raise ValueError(f"invalid {path.name}: {exc}") from exc
+
+
 def _load_manifest(path: Path) -> tuple[Mapping[str, Any], ...]:
     entries: list[Mapping[str, Any]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -176,22 +197,24 @@ def _load_manifest(path: Path) -> tuple[Mapping[str, Any], ...]:
 
 
 def _load_summary_csv(path: Path) -> tuple[list[dict[str, str]], list[str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        return list(reader), list(reader.fieldnames or [])
-
-
-def _factor_names(sweep_config: Mapping[str, Any]) -> tuple[str, ...]:
-    factors = sweep_config.get("factors")
-    if not isinstance(factors, list):
-        raise ValueError("sweep_config.json factors must be a list")
-
-    names: list[str] = []
-    for factor in factors:
-        if not isinstance(factor, Mapping) or not isinstance(factor.get("name"), str):
-            raise ValueError("sweep_config.json factors must include names")
-        names.append(factor["name"])
-    return tuple(names)
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle, strict=True)
+            fieldnames = list(reader.fieldnames or [])
+            rows: list[dict[str, str]] = []
+            for row_number, row in enumerate(reader, start=2):
+                if None in row:
+                    raise ValueError(
+                        f"malformed CSV artifact {path.name}: row {row_number} has extra cells"
+                    )
+                if any(value is None for value in row.values()):
+                    raise ValueError(
+                        f"malformed CSV artifact {path.name}: row {row_number} has missing cells"
+                    )
+                rows.append({key: value for key, value in row.items() if value is not None})
+            return rows, fieldnames
+    except csv.Error as exc:
+        raise ValueError(f"malformed CSV artifact {path.name}: {exc}") from exc
 
 
 def _validate_summary_columns(fieldnames: list[str], factor_names: tuple[str, ...]) -> None:
@@ -392,13 +415,3 @@ def _parse_bool(value: object) -> bool | None:
         return False
     return None
 
-
-def _sweep_name(
-    sweep_config: Mapping[str, Any],
-    summary_json: Mapping[str, Any],
-    sweep_dir: Path,
-) -> str:
-    for value in (summary_json.get("sweep_name"), sweep_config.get("sweep_name")):
-        if isinstance(value, str) and value:
-            return value
-    return sweep_dir.name

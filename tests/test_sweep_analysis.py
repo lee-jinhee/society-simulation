@@ -45,7 +45,17 @@ def write_analysis_fixture(tmp_path: Path) -> Path:
         json.dumps(
             {
                 "sweep_name": "network_topology_sweep",
-                "base_config": {"experiment_name": "network_herding"},
+                "base_config": {
+                    "experiment_name": "network_herding",
+                    "seed": 1,
+                    "num_agents": 30,
+                    "initial_opinion": {"type": "bernoulli", "probability_a": 0.5},
+                    "topology": {"type": "cycle"},
+                    "scheduler": {"type": "synchronous_rounds", "rounds": 2},
+                    "observation_policy": {"type": "neighbor_actions"},
+                    "update_policy": {"type": "threshold", "adoption_threshold": 0.6},
+                    "output_dir": str(sweep_dir / "ignored"),
+                },
                 "factors": [
                     {"name": "seed", "path": "seed", "values": [1, 2]},
                     {
@@ -333,6 +343,78 @@ def test_analyze_sweep_wraps_malformed_manifest_json(tmp_path: Path) -> None:
         analyze_sweep(sweep_dir)
 
 
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda config: config.update(
+                {
+                    "factors": [
+                        {"name": "seed", "path": "seed", "values": [1]},
+                        {"name": "seed", "path": "seed", "values": [2]},
+                    ]
+                }
+            ),
+            "invalid sweep_config.json: factor names must be unique",
+        ),
+        (
+            lambda config: config["factors"][0].pop("values"),
+            "invalid sweep_config.json: factor seed values must be a non-empty list",
+        ),
+    ],
+)
+def test_analyze_sweep_rejects_invalid_sweep_config_schema_via_parser(
+    tmp_path: Path,
+    mutation,
+    message: str,
+) -> None:
+    sweep_dir = write_analysis_fixture(tmp_path)
+    config = json.loads((sweep_dir / "sweep_config.json").read_text(encoding="utf-8"))
+    mutation(config)
+    (sweep_dir / "sweep_config.json").write_text(json.dumps(config), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=re.escape(message)):
+        analyze_sweep(sweep_dir)
+
+
+def test_analyze_sweep_rejects_malformed_summary_csv(tmp_path: Path) -> None:
+    sweep_dir = write_analysis_fixture(tmp_path)
+    (sweep_dir / "summary.csv").write_text('"unterminated\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="malformed CSV artifact summary\\.csv:"):
+        analyze_sweep(sweep_dir)
+
+
+@pytest.mark.parametrize(
+    ("row_transform", "message"),
+    [
+        (
+            lambda row: row[:-1],
+            "malformed CSV artifact summary.csv: row 2 has missing cells",
+        ),
+        (
+            lambda row: [*row, "extra"],
+            "malformed CSV artifact summary.csv: row 2 has extra cells",
+        ),
+    ],
+)
+def test_analyze_sweep_rejects_summary_csv_row_shape_errors(
+    tmp_path: Path,
+    row_transform,
+    message: str,
+) -> None:
+    sweep_dir = write_analysis_fixture(tmp_path)
+    with (sweep_dir / "summary.csv").open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.reader(handle))
+    rows[1] = row_transform(rows[1])
+    with (sweep_dir / "summary.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerows(rows)
+
+    with pytest.raises(ValueError, match=re.escape(message)):
+        analyze_sweep(sweep_dir)
+
+
 def test_analyze_sweep_rejects_summary_count_mismatch(tmp_path: Path) -> None:
     sweep_dir = write_analysis_fixture(tmp_path)
     (sweep_dir / "summary.json").write_text(
@@ -403,3 +485,54 @@ def test_analyze_sweep_allows_analysis_unused_summary_columns_to_be_absent(
 
     assert result.runs == 5
     assert group_by(result, "topology", "complete").mean_final_a_fraction == pytest.approx(0.95)
+
+
+def test_analyze_sweep_ignores_unparsable_metric_cells_in_completed_rows(
+    tmp_path: Path,
+) -> None:
+    sweep_dir = write_analysis_fixture(tmp_path)
+    rows = list(csv.DictReader((sweep_dir / "summary.csv").open(newline="", encoding="utf-8")))
+    rows[0]["final_a_fraction"] = "not-a-number"
+    rows[0]["polarization_index"] = "not-a-number"
+    with (sweep_dir / "summary.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=SUMMARY_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    complete = group_by(analyze_sweep(sweep_dir), "topology", "complete")
+
+    assert complete.mean_final_a_fraction == pytest.approx(0.9)
+    assert complete.mean_polarization_index == pytest.approx(0.1)
+
+
+def test_toplines_ignore_seed_when_non_seed_groups_have_metric_data(
+    tmp_path: Path,
+) -> None:
+    sweep_dir = write_analysis_fixture(tmp_path)
+    rows = list(csv.DictReader((sweep_dir / "summary.csv").open(newline="", encoding="utf-8")))
+    for row in rows:
+        if row["status"] == "completed":
+            row["polarization_index"] = "0.01"
+    rows[0]["polarization_index"] = "0.99"
+    with (sweep_dir / "summary.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=SUMMARY_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    result = analyze_sweep(sweep_dir)
+
+    assert group_by(result, "seed", "1").mean_polarization_index == pytest.approx(0.5)
+    assert result.toplines["highest_polarization"].factor_name == "topology"
+    assert result.toplines["highest_polarization"].value == "complete"
+
+
+@pytest.mark.parametrize("name", ["factor_name", "runs", "does_not_exist"])
+def test_group_summary_metric_rejects_unknown_or_nonmetric_names(
+    tmp_path: Path,
+    name: str,
+) -> None:
+    sweep_dir = write_analysis_fixture(tmp_path)
+    group = group_by(analyze_sweep(sweep_dir), "topology", "complete")
+
+    with pytest.raises(ValueError, match=f"unknown group summary metric: {name}"):
+        group.metric(name)
