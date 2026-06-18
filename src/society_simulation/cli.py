@@ -67,7 +67,10 @@ def _run_sweep_config(parser: argparse.ArgumentParser, config_path: str) -> int:
     except (json.JSONDecodeError, TypeError, ValueError) as exc:
         parser.error(f"Invalid sweep config file '{config_path}': {exc}")
 
-    result = run_sweep(sweep)
+    try:
+        result = run_sweep(sweep)
+    except (OSError, ValueError) as exc:
+        parser.error(f"Sweep run failed for '{config_path}': {exc}")
 
     print(f"sweep={result.sweep_name}")
     print(f"runs={result.runs}")

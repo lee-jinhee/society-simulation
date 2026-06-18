@@ -369,3 +369,49 @@ def test_cli_sweep_returns_one_when_any_run_fails(
         f"output_dir={output_dir}",
         f"summary_csv={summary_csv}",
     ]
+
+
+def test_cli_sweep_runtime_failures_report_clean_error(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sweep_path = tmp_path / "sweep.json"
+    output_dir = tmp_path / "sweep-output"
+    sweep_path.write_text(
+        json.dumps(
+            {
+                "sweep_name": "cli_sweep",
+                "base_config": {
+                    "experiment_name": "network_herding",
+                    "seed": 1,
+                    "num_agents": 6,
+                    "initial_opinion": {"type": "bernoulli", "probability_a": 0.5},
+                    "topology": {"type": "cycle"},
+                    "scheduler": {"type": "synchronous_rounds", "rounds": 2},
+                    "observation_policy": {"type": "neighbor_actions"},
+                    "update_policy": {"type": "majority_rule"},
+                    "output_dir": str(tmp_path / "ignored"),
+                },
+                "factors": [{"name": "seed", "path": "seed", "values": [1, 2]}],
+                "output_dir": str(output_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def raise_runtime_error(_sweep: object) -> object:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(cli, "run_sweep", raise_runtime_error)
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["sweep", str(sweep_path)])
+
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "Sweep run failed for" in captured.err
+    assert "disk full" in captured.err
+    assert "Traceback" not in captured.err
+    assert "sweep=" not in captured.out
+    assert "summary_csv=" not in captured.out
