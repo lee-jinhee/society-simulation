@@ -11,6 +11,7 @@ from typing import TypeAlias
 from society_simulation.config import Config, ExperimentConfig, NetworkHerdingConfig
 
 Scalar: TypeAlias = str | int | float | bool | None
+_FACTOR_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 @dataclass(frozen=True)
@@ -19,12 +20,29 @@ class SweepFactorValue:
     value: Scalar | None = None
     overrides: dict[str, object] | None = None
 
+    def to_override_dict(self) -> dict[str, object]:
+        if self.overrides is None:
+            raise ValueError("override value must include overrides")
+        return {"label": self.label, "overrides": deepcopy(self.overrides)}
+
 
 @dataclass(frozen=True)
 class SweepFactor:
     name: str
     path: str | None
     values: tuple[SweepFactorValue, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        if self.path is None:
+            return {
+                "name": self.name,
+                "values": [value.to_override_dict() for value in self.values],
+            }
+        return {
+            "name": self.name,
+            "path": self.path,
+            "values": [deepcopy(value.value) for value in self.values],
+        }
 
 
 @dataclass(frozen=True)
@@ -33,6 +51,14 @@ class SweepConfig:
     base_config: dict[str, object]
     factors: tuple[SweepFactor, ...]
     output_dir: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "sweep_name": self.sweep_name,
+            "base_config": deepcopy(self.base_config),
+            "factors": [factor.to_dict() for factor in self.factors],
+            "output_dir": self.output_dir,
+        }
 
 
 @dataclass(frozen=True)
@@ -52,6 +78,11 @@ def parse_sweep_config(data: object) -> SweepConfig:
     if not isinstance(data, dict):
         raise ValueError("sweep config root must be an object")
 
+    _reject_unknown_keys(
+        data,
+        allowed={"sweep_name", "base_config", "factors", "output_dir"},
+        path="sweep config",
+    )
     sweep_name = _require_non_empty_str(data.get("sweep_name"), "sweep_name")
     base_config = _require_mapping(data.get("base_config"), "base_config")
     factors_data = data.get("factors")
@@ -111,6 +142,8 @@ def apply_path_override(config: dict[str, object], path: str, value: object) -> 
         if not isinstance(next_value, dict):
             raise ValueError(f"traverses non-object field {'.'.join(traversed)}")
         target = next_value
+    if parts[-1] not in target:
+        raise ValueError(f"factor path {path} does not exist")
     target[parts[-1]] = value
 
 
@@ -134,7 +167,9 @@ def safe_label(value: object) -> str:
         text = str(value)
 
     label = re.sub(r"[^A-Za-z0-9-]+", "_", text).strip("_")
-    return label or "value"
+    if not label:
+        raise ValueError("label must contain at least one filesystem-safe character")
+    return label
 
 
 def _parse_factor(data: object) -> SweepFactor:
@@ -142,9 +177,20 @@ def _parse_factor(data: object) -> SweepFactor:
         raise ValueError("factor must be an object")
 
     name = _require_non_empty_str(data.get("name"), "factor name")
-    path = data.get("path")
-    if path is not None and not isinstance(path, str):
+    if not _FACTOR_NAME_PATTERN.fullmatch(name):
+        raise ValueError("factor name must match ^[A-Za-z0-9_-]+$")
+    _reject_unknown_keys(data, allowed={"name", "path", "values"}, path=f"factor {name}")
+
+    path: str | None
+    if "path" not in data:
+        path = None
+    elif data["path"] is None:
+        raise ValueError(f"factor {name} path must be omitted for override factors")
+    elif not isinstance(data["path"], str):
         raise ValueError(f"factor {name} path must be a non-empty string")
+    else:
+        path = data["path"]
+
     if path == "":
         raise ValueError(f"factor {name} path must be a non-empty string")
 
@@ -173,6 +219,11 @@ def _parse_path_value(factor_name: str, value: object) -> SweepFactorValue:
 def _parse_override_value(factor_name: str, value: object) -> SweepFactorValue:
     if not isinstance(value, dict):
         raise ValueError(f"factor {factor_name} values must be override objects")
+    _reject_unknown_keys(
+        value,
+        allowed={"label", "overrides"},
+        path=f"factor {factor_name} value",
+    )
     raw_label = value.get("label")
     if not isinstance(raw_label, str) or not raw_label:
         raise ValueError(f"factor {factor_name} label must be a non-empty string")
@@ -196,3 +247,14 @@ def _require_non_empty_str(value: object, field: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{field} must be a non-empty string")
     return value
+
+
+def _reject_unknown_keys(
+    data: dict[str, object],
+    *,
+    allowed: set[str],
+    path: str,
+) -> None:
+    for key in data:
+        if key not in allowed:
+            raise ValueError(f"{path} contains unknown key {key}")

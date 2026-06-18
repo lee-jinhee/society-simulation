@@ -142,6 +142,111 @@ def test_safe_label_converts_values_to_filesystem_safe_labels() -> None:
     assert safe_label(None) == "null"
 
 
+def test_sweep_config_to_dict_preserves_user_facing_schema(tmp_path: Path) -> None:
+    data = valid_sweep_dict(tmp_path)
+    path = tmp_path / "sweep.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    sweep = load_sweep_config(path)
+
+    assert sweep.to_dict() == data
+
+
+def test_load_sweep_config_rejects_missing_final_path_segment(tmp_path: Path) -> None:
+    data = valid_sweep_dict(tmp_path)
+    data["factors"] = [{"name": "bad", "path": "topology.typo", "values": ["complete"]}]
+    path = tmp_path / "bad_path.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"factor path topology\.typo does not exist"):
+        load_sweep_config(path)
+
+
+@pytest.mark.parametrize("name", ["../escape", "bad/name", "!!!"])
+def test_load_sweep_config_rejects_unsafe_factor_names(
+    tmp_path: Path,
+    name: str,
+) -> None:
+    data = valid_sweep_dict(tmp_path)
+    data["factors"] = [{"name": name, "path": "seed", "values": [1]}]
+    path = tmp_path / "bad_factor_name.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="factor name must match"):
+        load_sweep_config(path)
+
+
+def test_load_sweep_config_rejects_explicit_null_path_for_override_factor(
+    tmp_path: Path,
+) -> None:
+    data = valid_sweep_dict(tmp_path)
+    data["factors"] = [
+        {
+            "name": "topology",
+            "path": None,
+            "values": [{"label": "cycle", "overrides": {"topology": {"type": "cycle"}}}],
+        }
+    ]
+    path = tmp_path / "null_path.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="factor topology path must be omitted"):
+        load_sweep_config(path)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda data: data.update({"extra": True}),
+            "sweep config contains unknown key extra",
+        ),
+        (
+            lambda data: data.update(
+                {"factors": [{"name": "seed", "path": "seed", "values": [1], "extra": True}]}
+            ),
+            "factor seed contains unknown key extra",
+        ),
+        (
+            lambda data: data.update(
+                {
+                    "factors": [
+                        {
+                            "name": "topology",
+                            "values": [
+                                {
+                                    "label": "cycle",
+                                    "overrides": {"topology": {"type": "cycle"}},
+                                    "extra": True,
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ),
+            "factor topology value contains unknown key extra",
+        ),
+    ],
+)
+def test_load_sweep_config_rejects_unknown_schema_keys(
+    tmp_path: Path,
+    mutation: object,
+    message: str,
+) -> None:
+    data = valid_sweep_dict(tmp_path)
+    mutation(data)
+    path = tmp_path / "unknown_key.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        load_sweep_config(path)
+
+
+def test_safe_label_rejects_values_that_do_not_produce_labels() -> None:
+    with pytest.raises(ValueError, match="label must contain"):
+        safe_label("///")
+
+
 @pytest.mark.parametrize(
     ("mutation", "message"),
     [
