@@ -1,6 +1,7 @@
 import pytest
 
 from society_simulation.config import NetworkUpdatePolicyConfig
+from society_simulation.llm_policy import MockLLMPolicy
 from society_simulation.network_models import NetworkObservation
 from society_simulation.network_policies import (
     DeGrootPolicy,
@@ -169,6 +170,10 @@ def test_policy_factory_builds_supported_policies() -> None:
     assert isinstance(
         build_network_update_policy(NetworkUpdatePolicyConfig(type="degroot", self_weight=0.4)),
         DeGrootPolicy,
+    )
+    assert isinstance(
+        build_network_update_policy(NetworkUpdatePolicyConfig(type="mock_llm")),
+        MockLLMPolicy,
     )
 
 

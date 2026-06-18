@@ -62,6 +62,24 @@ def test_network_config_to_dict_preserves_present_optional_fields(tmp_path: Path
     NetworkHerdingConfig.from_dict(payload).validate()
 
 
+def test_network_config_to_dict_preserves_mock_llm_policy_fields(tmp_path: Path) -> None:
+    data = valid_network_config(tmp_path)
+    data["update_policy"] = {
+        "type": "mock_llm",
+        "provider": "mock",
+        "model": "mock-current",
+        "response_style": "current",
+        "input_cost_per_1m_tokens": 0.1,
+        "output_cost_per_1m_tokens": 0.2,
+    }
+
+    config = NetworkHerdingConfig.from_dict(data)
+    payload = config.to_dict()
+
+    assert payload["update_policy"] == data["update_policy"]
+    NetworkHerdingConfig.from_dict(payload).validate()
+
+
 def test_load_network_herding_config_rejects_root_non_object(tmp_path: Path) -> None:
     config_path = tmp_path / "network.json"
     config_path.write_text("[1, 2, 3]", encoding="utf-8")
@@ -214,6 +232,20 @@ def test_network_config_supports_degroot_policy(tmp_path: Path) -> None:
     assert config.update_policy.self_weight == 0.3
 
 
+def test_network_config_supports_mock_llm_policy_defaults(tmp_path: Path) -> None:
+    data = valid_network_config(tmp_path)
+    data["update_policy"] = {"type": "mock_llm"}
+
+    config = NetworkHerdingConfig.from_dict(data)
+
+    config.validate()
+    assert config.update_policy.type == "mock_llm"
+    assert config.update_policy.provider is None
+    assert config.update_policy.response_style is None
+    assert config.update_policy.input_cost_per_1m_tokens is None
+    assert config.update_policy.output_cost_per_1m_tokens is None
+
+
 @pytest.mark.parametrize(
     ("topology_type", "field", "value"),
     [
@@ -255,6 +287,11 @@ def test_network_config_rejects_irrelevant_topology_fields(
         ("majority_rule", "self_weight", 0.2),
         ("threshold", "self_weight", 0.2),
         ("degroot", "adoption_threshold", 0.9),
+        ("mock_llm", "adoption_threshold", 0.9),
+        ("mock_llm", "self_weight", 0.2),
+        ("majority_rule", "provider", "mock"),
+        ("threshold", "response_style", "current"),
+        ("degroot", "input_cost_per_1m_tokens", 0.1),
     ],
 )
 def test_network_config_rejects_irrelevant_update_policy_fields(
@@ -277,3 +314,46 @@ def test_network_config_rejects_irrelevant_update_policy_fields(
         match=rf"update_policy\.{field} is not allowed for {policy_type} update_policy",
     ):
         NetworkHerdingConfig.from_dict(data)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message", "stage"),
+    [
+        ("provider", "openai", "unsupported llm provider", "validate"),
+        ("response_style", "random", "unsupported mock llm response_style", "validate"),
+        (
+            "input_cost_per_1m_tokens",
+            -0.1,
+            "input_cost_per_1m_tokens must be a non-negative finite number",
+            "validate",
+        ),
+        (
+            "output_cost_per_1m_tokens",
+            float("inf"),
+            "output_cost_per_1m_tokens must be a non-negative finite number",
+            "validate",
+        ),
+        ("provider", "", "update_policy.provider must be a non-empty string", "from_dict"),
+        ("model", "", "update_policy.model must be a non-empty string", "from_dict"),
+    ],
+)
+def test_network_config_rejects_invalid_mock_llm_policy_fields(
+    tmp_path: Path,
+    field: str,
+    value: object,
+    message: str,
+    stage: str,
+) -> None:
+    data = valid_network_config(tmp_path)
+    update_policy: dict[str, object] = {"type": "mock_llm"}
+    update_policy[field] = value
+    data["update_policy"] = update_policy
+
+    if stage == "from_dict":
+        with pytest.raises(ValueError, match=message):
+            NetworkHerdingConfig.from_dict(data)
+        return
+
+    config = NetworkHerdingConfig.from_dict(data)
+    with pytest.raises(ValueError, match=message):
+        config.validate()

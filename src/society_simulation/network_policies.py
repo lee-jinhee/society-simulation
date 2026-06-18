@@ -4,6 +4,7 @@ from math import isfinite
 from statistics import mean
 
 from society_simulation.config import NetworkUpdatePolicyConfig
+from society_simulation.llm_policy import MockLLMPolicy
 from society_simulation.models import Action
 from society_simulation.network_models import NetworkDecision, NetworkObservation
 from society_simulation.policies import confidence_from_belief
@@ -155,7 +156,7 @@ class DeGrootPolicy:
         )
 
 
-NetworkUpdatePolicy = MajorityRulePolicy | ThresholdPolicy | DeGrootPolicy
+NetworkUpdatePolicy = MajorityRulePolicy | ThresholdPolicy | DeGrootPolicy | MockLLMPolicy
 
 
 def build_network_update_policy(config: NetworkUpdatePolicyConfig) -> NetworkUpdatePolicy:
@@ -169,4 +170,12 @@ def build_network_update_policy(config: NetworkUpdatePolicyConfig) -> NetworkUpd
         if config.self_weight is None:
             raise ValueError("self_weight must be between 0 and 1")
         return DeGrootPolicy(self_weight=config.self_weight)
+    if config.type == "mock_llm":
+        return MockLLMPolicy(
+            provider=config.provider or "mock",
+            model=config.model,
+            response_style=config.response_style or "neighbor_majority",
+            input_cost_per_1m_tokens=config.input_cost_per_1m_tokens or 0.0,
+            output_cost_per_1m_tokens=config.output_cost_per_1m_tokens or 0.0,
+        )
     raise ValueError("unsupported network update_policy type")

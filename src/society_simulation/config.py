@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+from math import isfinite
 from pathlib import Path
 from typing import Literal
 
@@ -115,6 +116,19 @@ def _parse_optional_float(data: dict[str, object], field: str, path: str) -> flo
     if field not in data:
         return None
     return _require_float(data[field], path)
+
+
+def _parse_optional_str(data: dict[str, object], field: str, path: str) -> str | None:
+    if field not in data:
+        return None
+    return _require_non_empty_str(data[field], path)
+
+
+def _validate_non_negative_finite_number(value: object, field: str) -> float:
+    parsed = _require_float(value, field)
+    if not isfinite(parsed) or parsed < 0:
+        raise ValueError(f"{field} must be a non-negative finite number")
+    return parsed
 
 
 def _reject_present_fields(
@@ -318,6 +332,11 @@ class NetworkUpdatePolicyConfig:
     type: str
     adoption_threshold: float | None = None
     self_weight: float | None = None
+    provider: str | None = None
+    model: str | None = None
+    response_style: str | None = None
+    input_cost_per_1m_tokens: float | None = None
+    output_cost_per_1m_tokens: float | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> NetworkUpdatePolicyConfig:
@@ -326,13 +345,20 @@ class NetworkUpdatePolicyConfig:
         if not isinstance(policy_type, str):
             raise ValueError("update_policy.type must be a non-empty string")
 
+        llm_fields = (
+            "provider",
+            "model",
+            "response_style",
+            "input_cost_per_1m_tokens",
+            "output_cost_per_1m_tokens",
+        )
         if policy_type == "majority_rule":
             _reject_present_fields(
                 data,
                 path_prefix="update_policy",
                 selected_type=policy_type,
                 kind="update_policy",
-                fields=("adoption_threshold", "self_weight"),
+                fields=("adoption_threshold", "self_weight", *llm_fields),
             )
         elif policy_type == "threshold":
             _reject_present_fields(
@@ -340,7 +366,7 @@ class NetworkUpdatePolicyConfig:
                 path_prefix="update_policy",
                 selected_type=policy_type,
                 kind="update_policy",
-                fields=("self_weight",),
+                fields=("self_weight", *llm_fields),
             )
         elif policy_type == "degroot":
             _reject_present_fields(
@@ -348,7 +374,15 @@ class NetworkUpdatePolicyConfig:
                 path_prefix="update_policy",
                 selected_type=policy_type,
                 kind="update_policy",
-                fields=("adoption_threshold",),
+                fields=("adoption_threshold", *llm_fields),
+            )
+        elif policy_type == "mock_llm":
+            _reject_present_fields(
+                data,
+                path_prefix="update_policy",
+                selected_type=policy_type,
+                kind="update_policy",
+                fields=("adoption_threshold", "self_weight"),
             )
         return cls(
             type=policy_type,
@@ -356,6 +390,23 @@ class NetworkUpdatePolicyConfig:
                 data, "adoption_threshold", "update_policy.adoption_threshold"
             ),
             self_weight=_parse_optional_float(data, "self_weight", "update_policy.self_weight"),
+            provider=_parse_optional_str(data, "provider", "update_policy.provider"),
+            model=_parse_optional_str(data, "model", "update_policy.model"),
+            response_style=_parse_optional_str(
+                data,
+                "response_style",
+                "update_policy.response_style",
+            ),
+            input_cost_per_1m_tokens=_parse_optional_float(
+                data,
+                "input_cost_per_1m_tokens",
+                "update_policy.input_cost_per_1m_tokens",
+            ),
+            output_cost_per_1m_tokens=_parse_optional_float(
+                data,
+                "output_cost_per_1m_tokens",
+                "update_policy.output_cost_per_1m_tokens",
+            ),
         )
 
     def validate(self) -> None:
@@ -378,6 +429,26 @@ class NetworkUpdatePolicyConfig:
                 raise ValueError("self_weight must be between 0 and 1")
             _validate_probability(self.self_weight, "self_weight", 0.0, 1.0)
             return
+        if self.type == "mock_llm":
+            if self.provider is not None and self.provider != "mock":
+                raise ValueError("unsupported llm provider")
+            if self.response_style is not None and self.response_style not in (
+                "neighbor_majority",
+                "current",
+                "contrarian",
+            ):
+                raise ValueError("unsupported mock llm response_style")
+            if self.input_cost_per_1m_tokens is not None:
+                _validate_non_negative_finite_number(
+                    self.input_cost_per_1m_tokens,
+                    "input_cost_per_1m_tokens",
+                )
+            if self.output_cost_per_1m_tokens is not None:
+                _validate_non_negative_finite_number(
+                    self.output_cost_per_1m_tokens,
+                    "output_cost_per_1m_tokens",
+                )
+            return
 
         raise ValueError("unsupported network update_policy type")
 
@@ -387,6 +458,16 @@ class NetworkUpdatePolicyConfig:
             data["adoption_threshold"] = self.adoption_threshold
         if self.self_weight is not None:
             data["self_weight"] = self.self_weight
+        if self.provider is not None:
+            data["provider"] = self.provider
+        if self.model is not None:
+            data["model"] = self.model
+        if self.response_style is not None:
+            data["response_style"] = self.response_style
+        if self.input_cost_per_1m_tokens is not None:
+            data["input_cost_per_1m_tokens"] = self.input_cost_per_1m_tokens
+        if self.output_cost_per_1m_tokens is not None:
+            data["output_cost_per_1m_tokens"] = self.output_cost_per_1m_tokens
         return data
 
 
