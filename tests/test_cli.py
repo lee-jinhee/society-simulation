@@ -140,9 +140,49 @@ def test_cli_runs_network_herding_config_and_prints_summary(
     output = capsys.readouterr().out
     assert "experiment=network_herding" in output
     assert "action_counts=" in output
+    assert "llm_calls=" not in output
     assert "output_dir=" in output
     assert (output_dir / "graph.json").exists()
     assert (output_dir / "timeseries.jsonl").exists()
+
+
+def test_cli_runs_mock_llm_network_config_and_prints_usage(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_path = tmp_path / "mock_llm_network.json"
+    output_dir = tmp_path / "mock-llm-network-run"
+    config_path.write_text(
+        json.dumps(
+            {
+                "experiment_name": "network_herding",
+                "seed": 5,
+                "num_agents": 6,
+                "initial_opinion": {"type": "bernoulli", "probability_a": 0.5},
+                "topology": {"type": "cycle"},
+                "scheduler": {"type": "synchronous_rounds", "rounds": 2},
+                "observation_policy": {"type": "neighbor_actions"},
+                "update_policy": {
+                    "type": "mock_llm",
+                    "response_style": "neighbor_majority",
+                },
+                "output_dir": str(output_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = cli.main(["run", str(config_path)])
+
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert "experiment=network_herding" in output
+    assert "llm_calls=12" in output
+    assert "llm_prompt_tokens=" in output
+    assert "llm_completion_tokens=" in output
+    assert "llm_estimated_cost_usd=0.00000000" in output
+    metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
+    assert metrics["llm_usage"]["calls"] == 12
 
 
 def test_example_network_config_exists_and_is_valid() -> None:
@@ -152,6 +192,16 @@ def test_example_network_config_exists_and_is_valid() -> None:
 
     assert isinstance(config, NetworkHerdingConfig)
     assert config.experiment_name == "network_herding"
+
+
+def test_example_mock_llm_network_config_exists_and_is_valid() -> None:
+    from society_simulation.config import NetworkHerdingConfig, load_config
+
+    config = load_config("examples/network_herding_mock_llm.json")
+
+    assert isinstance(config, NetworkHerdingConfig)
+    assert config.experiment_name == "network_herding"
+    assert config.update_policy.type == "mock_llm"
 
 
 @pytest.mark.parametrize("error", [OSError("disk full"), ValueError("bad run")])

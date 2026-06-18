@@ -1,6 +1,6 @@
 # Society Simulation
 
-Society Simulation is a no-LLM baseline for sequential information cascades and network herding dynamics.
+Society Simulation is a baseline for sequential information cascades and network herding dynamics, with an optional no-cost mock LLM policy for exercising LLM-shaped experiment workflows.
 
 ## Setup
 
@@ -25,6 +25,14 @@ Network herding:
 ```bash
 python -m society_simulation run examples/network_herding.json
 ```
+
+Mock LLM network herding smoke test:
+
+```bash
+python -m society_simulation run examples/network_herding_mock_llm.json
+```
+
+The mock LLM path is deterministic and does not call any API. It records estimated prompt tokens, completion tokens, calls, and cost accounting in `metrics.json`; with the included mock config, API cost is `0`.
 
 Network topology sweep:
 

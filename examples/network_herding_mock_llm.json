@@ -1,0 +1,28 @@
+{
+  "experiment_name": "network_herding",
+  "seed": 7,
+  "num_agents": 5,
+  "initial_opinion": {
+    "type": "bernoulli",
+    "probability_a": 0.5
+  },
+  "topology": {
+    "type": "cycle"
+  },
+  "scheduler": {
+    "type": "synchronous_rounds",
+    "rounds": 3
+  },
+  "observation_policy": {
+    "type": "neighbor_actions"
+  },
+  "update_policy": {
+    "type": "mock_llm",
+    "provider": "mock",
+    "model": "mock-neighbor-majority",
+    "response_style": "neighbor_majority",
+    "input_cost_per_1m_tokens": 0.0,
+    "output_cost_per_1m_tokens": 0.0
+  },
+  "output_dir": "runs/network_herding_mock_llm"
+}

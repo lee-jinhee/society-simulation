@@ -20,6 +20,17 @@ def _require_action_counts(metrics: dict[str, object]) -> object:
     raise ValueError("metrics must include action_counts or final_action_counts")
 
 
+def _print_llm_usage(metrics: dict[str, object]) -> None:
+    llm_usage = metrics.get("llm_usage")
+    if not isinstance(llm_usage, dict):
+        return
+
+    print(f"llm_calls={llm_usage.get('calls', 0)}")
+    print(f"llm_prompt_tokens={llm_usage.get('prompt_tokens', 0)}")
+    print(f"llm_completion_tokens={llm_usage.get('completion_tokens', 0)}")
+    print(f"llm_estimated_cost_usd={float(llm_usage.get('total_cost_usd', 0.0)):.8f}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="society-sim")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -57,6 +68,7 @@ def _run_single_config(parser: argparse.ArgumentParser, config_path: str) -> int
         print(f"consensus_reached={metrics['consensus_reached']}")
     if "edge_disagreement_rate" in metrics:
         print(f"edge_disagreement_rate={metrics['edge_disagreement_rate']}")
+    _print_llm_usage(metrics)
     print(f"output_dir={result.output_dir}")
 
     return 0

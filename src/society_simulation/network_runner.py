@@ -62,6 +62,9 @@ def run_network_herding(config: NetworkHerdingConfig) -> NetworkRunResult:
 
     frozen_rounds = tuple(rounds)
     metrics = compute_final_network_metrics(graph, frozen_rounds)
+    usage_summary = getattr(policy, "usage_summary", None)
+    if callable(usage_summary):
+        metrics["llm_usage"] = usage_summary()
     output_dir = NetworkReplayWriter(config).write(
         graph=graph,
         rounds=frozen_rounds,

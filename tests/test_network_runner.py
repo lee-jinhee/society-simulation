@@ -75,3 +75,29 @@ def test_network_runner_supports_degroot_policy(tmp_path: Path) -> None:
 
     assert result.metrics["mean_belief"] >= 0.0
     assert result.metrics["mean_belief"] <= 1.0
+
+
+def test_network_runner_records_mock_llm_usage_metrics(tmp_path: Path) -> None:
+    config = make_config(
+        tmp_path,
+        update_policy={
+            "type": "mock_llm",
+            "response_style": "current",
+            "input_cost_per_1m_tokens": 1.0,
+            "output_cost_per_1m_tokens": 2.0,
+        },
+        output_name="mock-llm",
+    )
+
+    result = run_experiment(config)
+
+    usage = result.metrics["llm_usage"]
+    assert usage["provider"] == "mock"
+    assert usage["model"] == "mock-current"
+    assert usage["calls"] == config.num_agents * config.scheduler.rounds
+    assert usage["prompt_tokens"] > 0
+    assert usage["completion_tokens"] > 0
+    assert usage["total_cost_usd"] > 0
+
+    metrics_json = json.loads((result.output_dir / "metrics.json").read_text(encoding="utf-8"))
+    assert metrics_json["llm_usage"] == usage
