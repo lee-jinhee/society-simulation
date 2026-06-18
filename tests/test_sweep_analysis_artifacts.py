@@ -5,12 +5,27 @@ from pathlib import Path
 
 from society_simulation.sweep_analysis import analyze_sweep
 from society_simulation.sweep_analysis_artifacts import (
-    FAILURE_FIELDS,
-    GROUP_SUMMARY_FIELDS,
     SweepAnalysisArtifactPaths,
     write_analysis_artifacts,
 )
 from tests.test_sweep_analysis import write_analysis_fixture
+
+
+EXPECTED_GROUP_SUMMARY_FIELDS = [
+    "factor",
+    "value",
+    "runs",
+    "completed",
+    "failed",
+    "consensus_rate",
+    "mean_final_a_fraction",
+    "mean_polarization_index",
+    "mean_edge_disagreement_rate",
+    "mean_time_to_consensus",
+    "mean_opinion_variance",
+    "mean_component_count",
+]
+EXPECTED_FAILURE_FIELDS = ["run_id", "status", "error", "output_dir"]
 
 
 def field_names(dataclass_type) -> tuple[str, ...]:
@@ -99,7 +114,7 @@ def test_group_summary_csv_fields_order_and_numeric_formatting(
         reader = csv.DictReader(handle)
         rows = list(reader)
 
-    assert reader.fieldnames == list(GROUP_SUMMARY_FIELDS)
+    assert reader.fieldnames == EXPECTED_GROUP_SUMMARY_FIELDS
     assert [(row["factor"], row["value"]) for row in rows] == [
         ("seed", "1"),
         ("seed", "2"),
@@ -187,7 +202,7 @@ def test_failure_summary_csv_includes_failed_and_pending_rows_in_order(
         reader = csv.DictReader(handle)
         rows = list(reader)
 
-    assert reader.fieldnames == list(FAILURE_FIELDS)
+    assert reader.fieldnames == EXPECTED_FAILURE_FIELDS
     assert rows == [
         {
             "run_id": "seed-2__topology-cycle__threshold-0_7",
@@ -209,11 +224,15 @@ def test_write_analysis_artifacts_rewrites_report_and_json_deterministically(
 ) -> None:
     result = analyze_sweep(write_analysis_fixture(tmp_path))
     paths = write_analysis_artifacts(result)
-    report_before = paths.report_path.read_text(encoding="utf-8")
-    json_before = paths.group_summary_json_path.read_text(encoding="utf-8")
+    artifact_paths = (
+        paths.report_path,
+        paths.group_summary_csv_path,
+        paths.group_summary_json_path,
+        paths.failure_summary_csv_path,
+    )
+    contents_before = {path: path.read_bytes() for path in artifact_paths}
 
     rewritten_paths = write_analysis_artifacts(result)
 
     assert rewritten_paths == paths
-    assert paths.report_path.read_text(encoding="utf-8") == report_before
-    assert paths.group_summary_json_path.read_text(encoding="utf-8") == json_before
+    assert {path: path.read_bytes() for path in artifact_paths} == contents_before
