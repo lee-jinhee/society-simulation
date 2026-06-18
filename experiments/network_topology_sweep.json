@@ -1,0 +1,87 @@
+{
+  "sweep_name": "network_topology_sweep",
+  "base_config": {
+    "experiment_name": "network_herding",
+    "seed": 1,
+    "num_agents": 30,
+    "initial_opinion": {
+      "type": "bernoulli",
+      "probability_a": 0.5
+    },
+    "topology": {
+      "type": "small_world",
+      "degree": 4,
+      "rewiring_probability": 0.1
+    },
+    "scheduler": {
+      "type": "synchronous_rounds",
+      "rounds": 12
+    },
+    "observation_policy": {
+      "type": "neighbor_actions"
+    },
+    "update_policy": {
+      "type": "threshold",
+      "adoption_threshold": 0.6
+    },
+    "output_dir": "runs/ignored-by-sweep"
+  },
+  "factors": [
+    {
+      "name": "seed",
+      "path": "seed",
+      "values": [1, 2, 3]
+    },
+    {
+      "name": "initial_a",
+      "path": "initial_opinion.probability_a",
+      "values": [0.45, 0.55]
+    },
+    {
+      "name": "topology",
+      "values": [
+        {
+          "label": "complete",
+          "overrides": {
+            "topology": {
+              "type": "complete"
+            }
+          }
+        },
+        {
+          "label": "cycle",
+          "overrides": {
+            "topology": {
+              "type": "cycle"
+            }
+          }
+        },
+        {
+          "label": "small_world_k4_p01",
+          "overrides": {
+            "topology": {
+              "type": "small_world",
+              "degree": 4,
+              "rewiring_probability": 0.1
+            }
+          }
+        },
+        {
+          "label": "erdos_renyi_p02",
+          "overrides": {
+            "topology": {
+              "type": "erdos_renyi",
+              "edge_probability": 0.2
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "threshold",
+      "path": "update_policy.adoption_threshold",
+      "values": [0.55, 0.7]
+    }
+  ],
+  "output_dir": "runs/sweeps/network_topology_sweep"
+}

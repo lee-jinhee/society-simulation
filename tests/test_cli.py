@@ -415,3 +415,13 @@ def test_cli_sweep_runtime_failures_report_clean_error(
     assert "Traceback" not in captured.err
     assert "sweep=" not in captured.out
     assert "summary_csv=" not in captured.out
+
+
+def test_example_network_topology_sweep_exists_and_is_valid() -> None:
+    from society_simulation.sweep_config import expand_sweep, load_sweep_config
+
+    sweep = load_sweep_config("experiments/network_topology_sweep.json")
+    runs = expand_sweep(sweep)
+
+    assert sweep.sweep_name == "network_topology_sweep"
+    assert len(runs) == 48

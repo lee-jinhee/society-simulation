@@ -26,6 +26,12 @@ Network herding:
 python -m society_simulation run examples/network_herding.json
 ```
 
+Network topology sweep:
+
+```bash
+python -m society_simulation sweep experiments/network_topology_sweep.json
+```
+
 Artifacts are written to `output_dir` in the config. Sequential cascade runs write:
 
 - `config.json`
@@ -41,6 +47,14 @@ Network herding runs write:
 - `timeseries.jsonl`
 - `metrics.json`
 - `summary.txt`
+
+Sweep runs write:
+
+- `sweep_config.json`
+- `manifest.jsonl`
+- `summary.csv`
+- `summary.json`
+- `runs/<run_id>/...`
 
 ## Test
 
