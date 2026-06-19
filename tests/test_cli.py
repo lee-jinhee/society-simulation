@@ -236,6 +236,8 @@ def test_cli_runs_event_driven_opinion_config_and_prints_event_summary(
     assert "final_private_stance_mean=" in output
     assert "final_public_stance_mean=" in output
     assert "final_private_public_gap=" in output
+    assert "message_count=" in output
+    assert "action_counts=" not in output
     assert "llm_calls=" in output
     assert f"output_dir={output_dir}" in output
     assert (output_dir / "summary.md").exists()
@@ -249,6 +251,58 @@ def test_event_driven_congestion_pricing_experiment_exists_and_is_valid() -> Non
 
     assert isinstance(config, EventDrivenOpinionConfig)
     assert config.experiment_name == "event_driven_opinion_dynamics"
+    assert len(config.agents) == 8
+    assert config.days == 7
+    assert len(config.events) == 7
+    assert len(config.channels) == 1
+    assert config.output_dir == "runs/event_driven_congestion_pricing"
+
+
+def test_cli_run_partial_event_metrics_reports_clean_error(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "config.json"
+    output_dir = tmp_path / "network-run"
+    config_path.write_text(
+        json.dumps(
+            {
+                "experiment_name": "network_herding",
+                "seed": 5,
+                "num_agents": 6,
+                "initial_opinion": {"type": "bernoulli", "probability_a": 0.5},
+                "topology": {"type": "cycle"},
+                "scheduler": {"type": "synchronous_rounds", "rounds": 2},
+                "observation_policy": {"type": "neighbor_actions"},
+                "update_policy": {"type": "majority_rule"},
+                "output_dir": str(output_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        cli,
+        "run_experiment",
+        lambda _config: SimpleNamespace(
+            metrics={"final_private_stance_mean": 0.2},
+            output_dir=output_dir,
+        ),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["run", str(config_path)])
+
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "Experiment run failed" in captured.err
+    assert (
+        "event metrics must include final_private_stance_mean, "
+        "final_public_stance_mean, and final_private_public_gap"
+    ) in captured.err
+    assert "Traceback" not in captured.err
+    assert captured.out == ""
 
 
 @pytest.mark.parametrize("error", [OSError("disk full"), ValueError("bad run")])

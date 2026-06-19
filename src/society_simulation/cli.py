@@ -11,6 +11,12 @@ from society_simulation.sweep_analysis_artifacts import write_analysis_artifacts
 from society_simulation.sweep_config import load_sweep_config
 from society_simulation.sweep_runner import run_sweep
 
+EVENT_SUMMARY_FIELDS = (
+    "final_private_stance_mean",
+    "final_public_stance_mean",
+    "final_private_public_gap",
+)
+
 
 def _require_action_counts(metrics: dict[str, object]) -> object:
     if "action_counts" in metrics:
@@ -32,7 +38,15 @@ def _print_llm_usage(metrics: dict[str, object]) -> None:
 
 
 def _has_event_summary_metrics(metrics: dict[str, object]) -> bool:
-    return "final_private_stance_mean" in metrics
+    present = [field for field in EVENT_SUMMARY_FIELDS if field in metrics]
+    if not present:
+        return False
+    if len(present) != len(EVENT_SUMMARY_FIELDS):
+        raise ValueError(
+            "event metrics must include final_private_stance_mean, "
+            "final_public_stance_mean, and final_private_public_gap"
+        )
+    return True
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -69,6 +83,7 @@ def _run_single_config(parser: argparse.ArgumentParser, config_path: str) -> int
         print(f"final_private_stance_mean={metrics['final_private_stance_mean']}")
         print(f"final_public_stance_mean={metrics['final_public_stance_mean']}")
         print(f"final_private_public_gap={metrics['final_private_public_gap']}")
+        print(f"message_count={metrics.get('message_count')}")
     else:
         print(f"action_counts={action_counts}")
     if "correct_cascade" in metrics:

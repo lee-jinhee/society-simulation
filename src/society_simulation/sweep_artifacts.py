@@ -24,9 +24,13 @@ METRIC_FIELDS = (
     "final_private_stance_mean",
     "final_public_stance_mean",
     "final_private_public_gap",
+    "final_private_stance_variance",
+    "final_public_stance_variance",
     "final_mean_confidence",
     "final_mean_salience",
     "message_count",
+    "agent_count",
+    "day_count",
 )
 NUMERIC_MEAN_FIELDS = (
     "final_a_fraction",
@@ -39,9 +43,13 @@ NUMERIC_MEAN_FIELDS = (
     "final_private_stance_mean",
     "final_public_stance_mean",
     "final_private_public_gap",
+    "final_private_stance_variance",
+    "final_public_stance_variance",
     "final_mean_confidence",
     "final_mean_salience",
     "message_count",
+    "agent_count",
+    "day_count",
 )
 MANIFEST_FIELDS = (
     "run_id",

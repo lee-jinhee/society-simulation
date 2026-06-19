@@ -84,9 +84,13 @@ def test_write_sweep_artifacts_writes_manifest_csv_and_summary_json(
         "final_private_stance_mean",
         "final_public_stance_mean",
         "final_private_public_gap",
+        "final_private_stance_variance",
+        "final_public_stance_variance",
         "final_mean_confidence",
         "final_mean_salience",
         "message_count",
+        "agent_count",
+        "day_count",
     ]
     assert rows[0]["run_id"] == planned_runs[0].run_id
     assert rows[0]["status"] == "completed"
@@ -249,9 +253,13 @@ def test_write_sweep_artifacts_includes_event_driven_opinion_metrics(
                 "final_private_stance_mean": 0.2,
                 "final_public_stance_mean": 0.1,
                 "final_private_public_gap": 0.1,
+                "final_private_stance_variance": 0.04,
+                "final_public_stance_variance": 0.03,
                 "final_mean_confidence": 0.7,
                 "final_mean_salience": 0.8,
                 "message_count": 5,
+                "agent_count": 8,
+                "day_count": 7,
             },
         ),
     )
@@ -262,17 +270,46 @@ def test_write_sweep_artifacts_includes_event_driven_opinion_metrics(
     assert manifest_row["final_private_stance_mean"] == 0.2
     assert manifest_row["final_public_stance_mean"] == 0.1
     assert manifest_row["final_private_public_gap"] == 0.1
+    assert manifest_row["final_private_stance_variance"] == 0.04
+    assert manifest_row["final_public_stance_variance"] == 0.03
     assert manifest_row["final_mean_confidence"] == 0.7
     assert manifest_row["final_mean_salience"] == 0.8
     assert manifest_row["message_count"] == 5
+    assert manifest_row["agent_count"] == 8
+    assert manifest_row["day_count"] == 7
 
     with paths.summary_csv_path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         rows = list(reader)
-    assert "final_private_stance_mean" in (reader.fieldnames or [])
+    for field in (
+        "final_private_stance_mean",
+        "final_public_stance_mean",
+        "final_private_public_gap",
+        "final_private_stance_variance",
+        "final_public_stance_variance",
+        "final_mean_confidence",
+        "final_mean_salience",
+        "message_count",
+        "agent_count",
+        "day_count",
+    ):
+        assert field in (reader.fieldnames or [])
     assert rows[0]["final_private_stance_mean"] == "0.2"
+    assert rows[0]["final_private_stance_variance"] == "0.04"
+    assert rows[0]["final_public_stance_variance"] == "0.03"
     assert rows[0]["final_mean_salience"] == "0.8"
     assert rows[0]["message_count"] == "5"
+    assert rows[0]["agent_count"] == "8"
+    assert rows[0]["day_count"] == "7"
 
     summary = json.loads(paths.summary_json_path.read_text(encoding="utf-8"))
     assert summary["metric_means"]["final_private_stance_mean"] == 0.2
+    assert summary["metric_means"]["final_public_stance_mean"] == 0.1
+    assert summary["metric_means"]["final_private_public_gap"] == 0.1
+    assert summary["metric_means"]["final_private_stance_variance"] == 0.04
+    assert summary["metric_means"]["final_public_stance_variance"] == 0.03
+    assert summary["metric_means"]["final_mean_confidence"] == 0.7
+    assert summary["metric_means"]["final_mean_salience"] == 0.8
+    assert summary["metric_means"]["message_count"] == 5.0
+    assert summary["metric_means"]["agent_count"] == 8.0
+    assert summary["metric_means"]["day_count"] == 7.0
