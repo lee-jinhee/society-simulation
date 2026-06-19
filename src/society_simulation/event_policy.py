@@ -1,0 +1,543 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
+import copy
+from dataclasses import dataclass
+import json
+from math import isfinite
+import time
+from typing import Any
+
+from society_simulation.event_models import (
+    EventAgentProfile,
+    EventAgentState,
+    EventExposure,
+    EventMessage,
+)
+from society_simulation.llm_policy import (
+    JSONTransport,
+    LLMPricing,
+    LLMUsage,
+    OpenAICompatibleClient,
+    estimate_tokens,
+)
+
+TokenLimitParameter = str
+
+_ROLE_MESSAGE = (
+    "Stay in character. Do not mention being an AI, a model, a simulation, or an experiment. "
+    "You are an ordinary person thinking through a local policy discussion."
+)
+_REQUIRED_DECISION_FIELDS = (
+    "private_stance",
+    "public_stance",
+    "confidence",
+    "salience",
+    "emotion",
+    "private_reasoning",
+    "messages",
+    "memory_update",
+)
+_POSITIVE_KEYWORDS = ("pollution", "traffic", "health", "asthma")
+_NEGATIVE_KEYWORDS = ("fee", "cost", "burden", "income", "livelihood")
+
+
+@dataclass(frozen=True)
+class EventPolicyDecision:
+    state: EventAgentState
+    messages: tuple[EventMessage, ...]
+
+
+def parse_event_decision_content(
+    content: str,
+    agent_id: str = "agent",
+    day: int = 0,
+) -> EventPolicyDecision:
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise ValueError("event llm response content must be JSON") from exc
+    if not isinstance(data, dict):
+        raise ValueError("event llm response content must be a JSON object")
+
+    for field_name in _REQUIRED_DECISION_FIELDS:
+        if field_name not in data:
+            raise ValueError(f"event llm response content must include {field_name}")
+
+    messages_value = data["messages"]
+    if not isinstance(messages_value, list):
+        raise ValueError("messages must be a list")
+
+    messages = tuple(
+        _parse_event_message(message, agent_id=agent_id, day=day)
+        for message in messages_value
+    )
+    state = EventAgentState(
+        agent_id=agent_id,
+        day=day,
+        private_stance=data["private_stance"],
+        public_stance=data["public_stance"],
+        confidence=data["confidence"],
+        salience=data["salience"],
+        emotion=_require_non_empty_str(data["emotion"], "emotion"),
+        memory_summary=_require_non_empty_str(data["memory_update"], "memory_update"),
+        last_private_reasoning=_require_non_empty_str(
+            data["private_reasoning"],
+            "private_reasoning",
+        ),
+    )
+    return EventPolicyDecision(state=state, messages=messages)
+
+
+class MockPersonaPolicy:
+    name = "mock_persona"
+
+    def __init__(
+        self,
+        *,
+        response_style: str = "balanced",
+        provider: str = "mock",
+        model: str | None = None,
+        input_cost_per_1m_tokens: float = 0.0,
+        output_cost_per_1m_tokens: float = 0.0,
+    ) -> None:
+        if provider != "mock":
+            raise ValueError("unsupported persona provider")
+        if response_style not in ("balanced", "silent"):
+            raise ValueError("unsupported mock persona response_style")
+
+        self.response_style = response_style
+        self.provider = provider
+        self.model = model or f"mock-persona-{response_style}"
+        self.pricing = LLMPricing(
+            input_cost_per_1m_tokens=input_cost_per_1m_tokens,
+            output_cost_per_1m_tokens=output_cost_per_1m_tokens,
+        )
+        self.usage = LLMUsage()
+        self._audit_records: list[dict[str, Any]] = []
+
+    def decide(
+        self,
+        profile: EventAgentProfile,
+        current_state: EventAgentState,
+        exposures: Sequence[EventExposure],
+        *,
+        day: int,
+    ) -> EventPolicyDecision:
+        prompt = _event_prompt(profile, current_state, exposures)
+        started_at = time.perf_counter()
+        response_content = self._response_content(profile, current_state, exposures)
+        decision = parse_event_decision_content(
+            response_content,
+            agent_id=profile.agent_id,
+            day=day,
+        )
+        prompt_tokens = estimate_tokens(prompt)
+        completion_tokens = estimate_tokens(response_content)
+        latency_ms = (time.perf_counter() - started_at) * 1000
+        self.usage.record(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            pricing=self.pricing,
+        )
+        self._audit_records.append(
+            _event_audit_record(
+                agent_id=profile.agent_id,
+                day=day,
+                provider=self.provider,
+                model=self.model,
+                policy_type=self.name,
+                prompt=prompt,
+                raw_response={"content": response_content},
+                decision=decision,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                pricing=self.pricing,
+                latency_ms=latency_ms,
+            )
+        )
+        return decision
+
+    def usage_summary(self) -> dict[str, object]:
+        return self.usage.summary(provider=self.provider, model=self.model)
+
+    def audit_records(self) -> tuple[dict[str, Any], ...]:
+        return tuple(copy.deepcopy(record) for record in self._audit_records)
+
+    def _response_content(
+        self,
+        profile: EventAgentProfile,
+        current_state: EventAgentState,
+        exposures: Sequence[EventExposure],
+    ) -> str:
+        delta = _keyword_delta(exposures)
+        private_stance = _clamp_stance(current_state.private_stance + delta)
+        public_stance = _clamp_stance(current_state.public_stance + (delta / 2))
+        salience = _clamp_probability(
+            current_state.salience + (0.10 if exposures else 0.0),
+        )
+        confidence = _clamp_probability(current_state.confidence + (0.05 if exposures else 0.0))
+        messages: list[dict[str, str | None]] = []
+        if self.response_style != "silent":
+            channel = _group_chat_channel(profile)
+            messages.append(
+                {
+                    "channel": channel,
+                    "recipient": None,
+                    "text": "I am weighing the benefits and costs before deciding where I land.",
+                }
+            )
+
+        return json.dumps(
+            {
+                "private_stance": private_stance,
+                "public_stance": public_stance,
+                "confidence": confidence,
+                "salience": salience,
+                "emotion": "conflicted" if exposures else current_state.emotion,
+                "private_reasoning": _mock_private_reasoning(delta, exposures),
+                "messages": messages,
+                "memory_update": _mock_memory_update(profile, exposures),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+
+class OpenAICompatiblePersonaPolicy:
+    name = "event_persona"
+
+    def __init__(
+        self,
+        *,
+        model: str,
+        api_key: str,
+        provider: str = "openai_compatible",
+        base_url: str = "https://api.openai.com/v1",
+        temperature: float = 0.0,
+        max_completion_tokens: int = 512,
+        token_limit_parameter: TokenLimitParameter = "max_completion_tokens",
+        timeout_seconds: float = 30.0,
+        input_cost_per_1m_tokens: float = 0.0,
+        output_cost_per_1m_tokens: float = 0.0,
+        max_estimated_cost_usd: float | None = None,
+        transport: JSONTransport | None = None,
+    ) -> None:
+        if provider != "openai_compatible":
+            raise ValueError("unsupported persona provider")
+        if not model:
+            raise ValueError("model must be a non-empty string")
+        if isinstance(temperature, bool) or not isinstance(temperature, (int, float)):
+            raise ValueError("temperature must be between 0 and 2")
+        if not isfinite(temperature) or not 0.0 <= float(temperature) <= 2.0:
+            raise ValueError("temperature must be between 0 and 2")
+        if token_limit_parameter not in ("max_completion_tokens", "max_tokens"):
+            raise ValueError("token_limit_parameter must be max_completion_tokens or max_tokens")
+
+        self.provider = provider
+        self.model = model
+        self.temperature = float(temperature)
+        self.max_completion_tokens = _require_positive_int(
+            max_completion_tokens,
+            "max_completion_tokens",
+        )
+        self.token_limit_parameter = token_limit_parameter
+        self.pricing = LLMPricing(
+            input_cost_per_1m_tokens=input_cost_per_1m_tokens,
+            output_cost_per_1m_tokens=output_cost_per_1m_tokens,
+        )
+        self.max_estimated_cost_usd = (
+            None
+            if max_estimated_cost_usd is None
+            else _require_non_negative_finite_number(
+                max_estimated_cost_usd,
+                "max_estimated_cost_usd",
+            )
+        )
+        self.usage = LLMUsage()
+        self._audit_records: list[dict[str, Any]] = []
+        client_args: dict[str, object] = {
+            "base_url": base_url,
+            "api_key": api_key,
+            "timeout_seconds": timeout_seconds,
+        }
+        if transport is not None:
+            client_args["transport"] = transport
+        self._client = OpenAICompatibleClient(**client_args)
+
+    def decide(
+        self,
+        profile: EventAgentProfile,
+        current_state: EventAgentState,
+        exposures: Sequence[EventExposure],
+        *,
+        day: int,
+    ) -> EventPolicyDecision:
+        messages = [
+            {"role": "system", "content": _ROLE_MESSAGE},
+            {"role": "user", "content": _event_user_message(profile, current_state, exposures)},
+        ]
+        prompt = _messages_text(messages)
+        prompt_tokens_estimate = estimate_tokens(prompt)
+        self._raise_if_cost_cap_exceeded(
+            self.usage.input_cost_usd
+            + self.usage.output_cost_usd
+            + self.pricing.input_cost(prompt_tokens_estimate)
+        )
+
+        started_at = time.perf_counter()
+        response = self._client.create_chat_completion(
+            model=self.model,
+            messages=messages,
+            temperature=self.temperature,
+            max_completion_tokens=self.max_completion_tokens,
+            token_limit_parameter=self.token_limit_parameter,
+        )
+        content = _extract_choice_content(response)
+        decision = parse_event_decision_content(content, agent_id=profile.agent_id, day=day)
+        prompt_tokens, completion_tokens = _response_usage_tokens(
+            response,
+            default_prompt_tokens=prompt_tokens_estimate,
+            default_completion_tokens=estimate_tokens(content),
+        )
+        latency_ms = (time.perf_counter() - started_at) * 1000
+        self.usage.record(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            pricing=self.pricing,
+        )
+        self._raise_if_cost_cap_exceeded(self.usage.input_cost_usd + self.usage.output_cost_usd)
+        self._audit_records.append(
+            _event_audit_record(
+                agent_id=profile.agent_id,
+                day=day,
+                provider=self.provider,
+                model=self.model,
+                policy_type=self.name,
+                prompt=prompt,
+                raw_response=response,
+                decision=decision,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                pricing=self.pricing,
+                latency_ms=latency_ms,
+                messages=messages,
+            )
+        )
+        return decision
+
+    def usage_summary(self) -> dict[str, object]:
+        return self.usage.summary(provider=self.provider, model=self.model)
+
+    def audit_records(self) -> tuple[dict[str, Any], ...]:
+        return tuple(copy.deepcopy(record) for record in self._audit_records)
+
+    def _raise_if_cost_cap_exceeded(self, estimated_cost_usd: float) -> None:
+        if self.max_estimated_cost_usd is None:
+            return
+        if estimated_cost_usd > self.max_estimated_cost_usd:
+            raise ValueError("llm estimated cost cap exceeded")
+
+
+def _parse_event_message(message: object, *, agent_id: str, day: int) -> EventMessage:
+    if not isinstance(message, dict):
+        raise ValueError("messages entries must be objects")
+    for field_name in ("channel", "recipient", "text"):
+        if field_name not in message:
+            raise ValueError(f"message must include {field_name}")
+    recipient = message["recipient"]
+    if recipient is not None and not isinstance(recipient, str):
+        raise ValueError("recipient must be a string or null")
+    return EventMessage(
+        day=day,
+        sender_agent_id=agent_id,
+        channel=_require_non_empty_str(message["channel"], "channel"),
+        recipient_agent_id=recipient,
+        text=_require_non_empty_str(message["text"], "text"),
+    )
+
+
+def _event_prompt(
+    profile: EventAgentProfile,
+    current_state: EventAgentState,
+    exposures: Sequence[EventExposure],
+) -> str:
+    return _messages_text(
+        [
+            {"role": "system", "content": _ROLE_MESSAGE},
+            {"role": "user", "content": _event_user_message(profile, current_state, exposures)},
+        ]
+    )
+
+
+def _event_user_message(
+    profile: EventAgentProfile,
+    current_state: EventAgentState,
+    exposures: Sequence[EventExposure],
+) -> str:
+    exposure_rows = [exposure.to_dict() for exposure in exposures]
+    return (
+        "Consider the new information and decide how your views and messages change.\n"
+        "Return only JSON with keys private_stance, public_stance, confidence, salience, "
+        "emotion, private_reasoning, messages, and memory_update.\n"
+        "messages must be a list of objects with channel, recipient, and text.\n"
+        f"profile={json.dumps(profile.to_dict(), sort_keys=True)}\n"
+        f"current_state={json.dumps(current_state.to_dict(), sort_keys=True)}\n"
+        f"exposures={json.dumps(exposure_rows, sort_keys=True)}"
+    )
+
+
+def _event_audit_record(
+    *,
+    agent_id: str,
+    day: int,
+    provider: str,
+    model: str,
+    policy_type: str,
+    prompt: str,
+    raw_response: dict[str, object],
+    decision: EventPolicyDecision,
+    prompt_tokens: int,
+    completion_tokens: int,
+    pricing: LLMPricing,
+    latency_ms: float,
+    messages: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    input_cost_usd = pricing.input_cost(prompt_tokens)
+    output_cost_usd = pricing.output_cost(completion_tokens)
+    state = decision.state
+    record: dict[str, Any] = {
+        "agent_id": agent_id,
+        "day": day,
+        "provider": provider,
+        "model": model,
+        "policy_type": policy_type,
+        "prompt": prompt,
+        "raw_response": copy.deepcopy(raw_response),
+        "parsed_private_stance": state.private_stance,
+        "parsed_public_stance": state.public_stance,
+        "parsed_confidence": state.confidence,
+        "parsed_salience": state.salience,
+        "parsed_emotion": state.emotion,
+        "parsed_memory_summary": state.memory_summary,
+        "parsed_private_reasoning": state.last_private_reasoning,
+        "parsed_messages": [message.to_dict() for message in decision.messages],
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "input_cost_usd": input_cost_usd,
+        "output_cost_usd": output_cost_usd,
+        "total_cost_usd": input_cost_usd + output_cost_usd,
+        "latency_ms": latency_ms,
+    }
+    if messages is not None:
+        record["messages"] = copy.deepcopy(messages)
+    return record
+
+
+def _keyword_delta(exposures: Sequence[EventExposure]) -> float:
+    if not exposures:
+        return 0.0
+    scores = []
+    for exposure in exposures:
+        text = exposure.content.lower()
+        score = 0.0
+        if any(keyword in text for keyword in _POSITIVE_KEYWORDS):
+            score += 0.10
+        if any(keyword in text for keyword in _NEGATIVE_KEYWORDS):
+            score -= 0.10
+        scores.append(score)
+    return sum(scores) / len(scores)
+
+
+def _mock_private_reasoning(delta: float, exposures: Sequence[EventExposure]) -> str:
+    if not exposures:
+        return "No new information changed the view."
+    if delta > 0:
+        return "The information points to public health or traffic benefits."
+    if delta < 0:
+        return "The information raises cost or livelihood concerns."
+    return "The information gives reasons on both sides."
+
+
+def _mock_memory_update(profile: EventAgentProfile, exposures: Sequence[EventExposure]) -> str:
+    if not exposures:
+        return f"{profile.name} has no new policy information to add."
+    return f"{profile.name} considered new local policy information."
+
+
+def _group_chat_channel(profile: EventAgentProfile) -> str:
+    for channel in profile.media_habits:
+        if "chat" in channel:
+            return channel
+    return "neighborhood_group_chat"
+
+
+def _messages_text(messages: list[dict[str, str]]) -> str:
+    return "\n".join(f"{message['role']}:{message['content']}" for message in messages)
+
+
+def _extract_choice_content(response: dict[str, object]) -> str:
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise ValueError("llm response is missing choices[0].message.content")
+    first_choice = choices[0]
+    if not isinstance(first_choice, dict):
+        raise ValueError("llm response is missing choices[0].message.content")
+    message = first_choice.get("message")
+    if not isinstance(message, dict):
+        raise ValueError("llm response is missing choices[0].message.content")
+    content = message.get("content")
+    if not isinstance(content, str) or not content:
+        raise ValueError("llm response is missing choices[0].message.content")
+    return content
+
+
+def _response_usage_tokens(
+    response: dict[str, object],
+    *,
+    default_prompt_tokens: int,
+    default_completion_tokens: int,
+) -> tuple[int, int]:
+    usage = response.get("usage")
+    if not isinstance(usage, dict):
+        return default_prompt_tokens, default_completion_tokens
+
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    if isinstance(prompt_tokens, bool) or not isinstance(prompt_tokens, int) or prompt_tokens < 0:
+        prompt_tokens = default_prompt_tokens
+    if (
+        isinstance(completion_tokens, bool)
+        or not isinstance(completion_tokens, int)
+        or completion_tokens < 0
+    ):
+        completion_tokens = default_completion_tokens
+    return prompt_tokens, completion_tokens
+
+
+def _clamp_stance(value: float) -> float:
+    return max(-1.0, min(1.0, value))
+
+
+def _clamp_probability(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
+def _require_non_empty_str(value: object, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string")
+    return value
+
+
+def _require_positive_int(value: int, field_name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{field_name} must be a positive integer")
+    return value
+
+
+def _require_non_negative_finite_number(value: float, field_name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value):
+        raise ValueError(f"{field_name} must be a non-negative finite number")
+    if value < 0:
+        raise ValueError(f"{field_name} must be a non-negative finite number")
+    return float(value)
