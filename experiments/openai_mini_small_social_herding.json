@@ -1,0 +1,47 @@
+{
+  "sweep_name": "openai_mini_small_social_herding",
+  "base_config": {
+    "experiment_name": "network_herding",
+    "seed": 1,
+    "num_agents": 30,
+    "initial_opinion": {
+      "type": "bernoulli",
+      "probability_a": 0.5
+    },
+    "topology": {
+      "type": "small_world",
+      "degree": 4,
+      "rewiring_probability": 0.1
+    },
+    "scheduler": {
+      "type": "synchronous_rounds",
+      "rounds": 12
+    },
+    "observation_policy": {
+      "type": "neighbor_actions"
+    },
+    "update_policy": {
+      "type": "llm",
+      "provider": "openai_compatible",
+      "model": "gpt-5.4-mini",
+      "base_url": "https://api.openai.com/v1",
+      "api_key_env": "SOCIETY_SIM_LLM_API_KEY",
+      "temperature": 0.0,
+      "max_completion_tokens": 32,
+      "token_limit_parameter": "max_completion_tokens",
+      "timeout_seconds": 30.0,
+      "input_cost_per_1m_tokens": 0.75,
+      "output_cost_per_1m_tokens": 4.5,
+      "max_estimated_cost_usd": 0.3
+    },
+    "output_dir": "runs/ignored-by-sweep"
+  },
+  "factors": [
+    {
+      "name": "seed",
+      "path": "seed",
+      "values": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    }
+  ],
+  "output_dir": "runs/sweeps/openai_mini_small_social_herding"
+}
