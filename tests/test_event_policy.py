@@ -50,6 +50,21 @@ def exposure() -> EventExposure:
     )
 
 
+def llm_decision_content() -> str:
+    return json.dumps(
+        {
+            "private_stance": 0.1,
+            "public_stance": 0.0,
+            "confidence": 0.5,
+            "salience": 0.6,
+            "emotion": "conflicted",
+            "private_reasoning": "The announcement is plausible but costly.",
+            "messages": [],
+            "memory_update": "Jisoo remains conflicted.",
+        }
+    )
+
+
 def test_parse_event_decision_content_requires_complete_json() -> None:
     decision = parse_event_decision_content(
         json.dumps(
@@ -176,6 +191,103 @@ def test_openai_compatible_persona_policy_sends_human_role_prompt_without_experi
     assert "Stay in character" in prompt_text
     assert "social network experiment" not in prompt_text
     assert "secret-key" not in json.dumps(policy.audit_records(), sort_keys=True)
+
+
+def test_openai_compatible_persona_policy_redacts_secret_keys_and_auth_patterns() -> None:
+    def transport(
+        url: str,
+        headers: dict[str, str],
+        payload: dict[str, object],
+        timeout_seconds: float,
+    ) -> dict[str, object]:
+        del url, headers, payload, timeout_seconds
+        return {
+            "choices": [{"message": {"content": llm_decision_content()}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+            "safe_note": "keep this audit detail",
+            "secret-key": "debug",
+            "lowercase_auth": "authorization: bearer sk-other",
+            "basic_auth": "Authorization: Basic abc",
+            "debug_api-key_hint": "redact this",
+        }
+
+    policy = OpenAICompatiblePersonaPolicy(
+        model="cheap-chat",
+        api_key="secret-key",
+        base_url="https://example.test/v1",
+        transport=transport,
+    )
+
+    policy.decide(profile(), state(), (exposure(),), day=1)
+
+    audit_json = json.dumps(policy.audit_records(), sort_keys=True)
+    assert "keep this audit detail" in audit_json
+    assert "secret-key" not in audit_json
+    assert "authorization" not in audit_json.lower()
+    assert "bearer" not in audit_json.lower()
+    assert "basic abc" not in audit_json.lower()
+    assert "api-key" not in audit_json.lower()
+
+
+def test_openai_compatible_persona_policy_preflight_includes_worst_case_output_cost() -> None:
+    called = False
+
+    def transport(
+        url: str,
+        headers: dict[str, str],
+        payload: dict[str, object],
+        timeout_seconds: float,
+    ) -> dict[str, object]:
+        nonlocal called
+        del url, headers, payload, timeout_seconds
+        called = True
+        return {"choices": [{"message": {"content": llm_decision_content()}}]}
+
+    policy = OpenAICompatiblePersonaPolicy(
+        model="cheap-chat",
+        api_key="secret-key",
+        base_url="https://example.test/v1",
+        max_completion_tokens=32,
+        output_cost_per_1m_tokens=1_000_000.0,
+        max_estimated_cost_usd=31.0,
+        transport=transport,
+    )
+
+    with pytest.raises(ValueError, match="llm estimated cost cap exceeded"):
+        policy.decide(profile(), state(), (exposure(),), day=1)
+
+    assert called is False
+
+
+def test_openai_compatible_persona_policy_audits_paid_response_before_post_call_cap_error() -> None:
+    def transport(
+        url: str,
+        headers: dict[str, str],
+        payload: dict[str, object],
+        timeout_seconds: float,
+    ) -> dict[str, object]:
+        del url, headers, payload, timeout_seconds
+        return {
+            "choices": [{"message": {"content": llm_decision_content()}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 2},
+        }
+
+    policy = OpenAICompatiblePersonaPolicy(
+        model="cheap-chat",
+        api_key="secret-key",
+        base_url="https://example.test/v1",
+        max_completion_tokens=1,
+        output_cost_per_1m_tokens=1.0,
+        max_estimated_cost_usd=0.0000015,
+        transport=transport,
+    )
+
+    with pytest.raises(ValueError, match="llm estimated cost cap exceeded"):
+        policy.decide(profile(), state(), (exposure(),), day=1)
+
+    records = policy.audit_records()
+    assert len(records) == 1
+    assert records[0]["completion_tokens"] == 2
 
 
 def test_openai_compatible_persona_policy_redacts_echoed_secrets_from_audit() -> None:

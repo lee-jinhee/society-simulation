@@ -41,7 +41,14 @@ _REQUIRED_DECISION_FIELDS = (
 )
 _POSITIVE_KEYWORDS = ("pollution", "traffic", "health", "asthma")
 _NEGATIVE_KEYWORDS = ("fee", "cost", "burden", "income", "livelihood")
-_SENSITIVE_RESPONSE_KEYS = {"authorization", "api_key", "headers"}
+_SENSITIVE_RESPONSE_KEY_PATTERNS = ("authorization", "api_key", "api-key", "header")
+_SENSITIVE_RESPONSE_VALUE_PATTERNS = (
+    "authorization",
+    "bearer ",
+    "api_key",
+    "api-key",
+    "header",
+)
 _REDACTED = "[REDACTED]"
 
 
@@ -285,6 +292,7 @@ class OpenAICompatiblePersonaPolicy:
             self.usage.input_cost_usd
             + self.usage.output_cost_usd
             + self.pricing.input_cost(prompt_tokens_estimate)
+            + self.pricing.output_cost(self.max_completion_tokens)
         )
 
         started_at = time.perf_counter()
@@ -308,7 +316,6 @@ class OpenAICompatiblePersonaPolicy:
             completion_tokens=completion_tokens,
             pricing=self.pricing,
         )
-        self._raise_if_cost_cap_exceeded(self.usage.input_cost_usd + self.usage.output_cost_usd)
         self._audit_records.append(
             _event_audit_record(
                 agent_id=profile.agent_id,
@@ -327,6 +334,7 @@ class OpenAICompatiblePersonaPolicy:
                 sensitive_values=self._sensitive_audit_values,
             )
         )
+        self._raise_if_cost_cap_exceeded(self.usage.input_cost_usd + self.usage.output_cost_usd)
         return decision
 
     def usage_summary(self) -> dict[str, object]:
@@ -452,16 +460,12 @@ def _sanitize_audit_value(
                     sensitive_values=sensitive_values,
                 )
                 continue
-            normalized_key = key.lower()
-            if normalized_key in _SENSITIVE_RESPONSE_KEYS:
+            if _is_sensitive_audit_string(key, sensitive_values=sensitive_values):
                 continue
-            if "headers" in normalized_key:
-                sanitized[key] = _REDACTED
-            else:
-                sanitized[key] = _sanitize_audit_value(
-                    item,
-                    sensitive_values=sensitive_values,
-                )
+            sanitized[key] = _sanitize_audit_value(
+                item,
+                sensitive_values=sensitive_values,
+            )
         return sanitized
     if isinstance(value, list):
         return [
@@ -474,11 +478,18 @@ def _sanitize_audit_value(
             for item in value
         )
     if isinstance(value, str):
-        if "Bearer " in value:
-            return _REDACTED
-        if any(secret and secret in value for secret in sensitive_values):
+        if _is_sensitive_audit_string(value, sensitive_values=sensitive_values):
             return _REDACTED
     return copy.deepcopy(value)
+
+
+def _is_sensitive_audit_string(value: str, *, sensitive_values: tuple[str, ...]) -> bool:
+    lowered = value.lower()
+    if any(pattern in lowered for pattern in _SENSITIVE_RESPONSE_KEY_PATTERNS):
+        return True
+    if any(pattern in lowered for pattern in _SENSITIVE_RESPONSE_VALUE_PATTERNS):
+        return True
+    return any(secret and secret in value for secret in sensitive_values)
 
 
 def _keyword_delta(exposures: Sequence[EventExposure]) -> float:
