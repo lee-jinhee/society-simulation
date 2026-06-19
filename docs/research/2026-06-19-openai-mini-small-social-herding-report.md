@@ -1,207 +1,97 @@
-# Local Social Observation Is Sufficient to Elicit LLM-Mediated Herding in a Small Agent Society
+# Local Social Observation Elicits Directional Herding in a Small LLM Agent Society
 
 Date: 2026-06-19
 
-## Status
-
-Completed pilot. `OPENAI_API_KEY` was loaded from `/home/jhlee/repo/.env` and mapped to `SOCIETY_SIM_LLM_API_KEY`. The sweep completed all 10 planned seeds, producing 3,600 successful LLM decisions at an estimated simulator cost of `$0.631049`.
-
 ## Abstract
 
-This pilot asks whether a population of LLM-controlled agents, each observing only its network neighbors' previous actions and beliefs, converges to collective consensus under repeated synchronous interaction. We instantiate 30 agents on a small-world graph, run 12 update rounds, and repeat the experiment over 10 random seeds using `gpt-5.4-mini`. The simulator records every model decision, prompt, raw response, parsed action, token count, and estimated call-level cost. Across 10 completed runs, 8 reached unanimous A consensus and 2 ended in strong A majorities with residual B minorities. The mean final A fraction was 0.9633, mean edge disagreement was 0.0233, and the mean consensus time among consensus runs was 6.25 rounds. The result is a small but useful pilot: it shows strong local-majority-following behavior and a marked directional drift toward A under the current prompt and environment, while leaving open whether that drift is a model prior, prompt artifact, or topology/initialization effect.
+We study whether a population of LLM-controlled agents can produce macro-level social dynamics from only local observations. Thirty agents are placed on a small-world network. At each synchronous update, every agent observes only its own current action and belief plus the previous actions and beliefs of its graph neighbors. The agent then queries `gpt-5.4-mini` for a binary action and belief probability. Across 10 random seeds and 3,600 audited LLM decisions, 8 runs reached unanimous A consensus and 2 runs ended with strong A majorities but residual B minorities. The mean final A fraction was 0.9633, mean edge disagreement was 0.0233, and mean consensus time among consensus runs was 6.25 rounds. Decision-level audits reveal a strong asymmetry: the model followed A-majority neighborhoods in 2,990 of 2,997 cases, but followed B-majority neighborhoods in only 242 of 322 cases. This pilot therefore demonstrates that local LLM interactions can generate robust aggregate herding, while also exposing a likely label- or prompt-induced directional bias that must be controlled before making broader claims about social prediction.
 
-## 1. Introduction
+## 1. Research Question
 
-LLM agent societies are useful only if their macro-level behavior can be audited back to micro-level interactions. This pilot therefore couples a minimal network herding environment with a decision-level LLM audit trail. Each agent receives a compact textual observation of its own current action and belief plus the actions and beliefs of its graph neighbors. The model returns only JSON containing the next binary action and belief probability.
+The purpose of this experiment was not to test whether an individual LLM can answer a social-science prompt. The purpose was to test whether many locally situated LLM agents, interacting repeatedly through a network, can generate measurable crowd-level phenomena.
 
-The experiment is intentionally small. Its goal is to validate whether real LLM calls behave stably enough for larger sweeps, not to claim population-level external validity. A useful pilot should answer three questions: whether the model follows the requested response schema, whether token and cost accounting remain bounded, and whether the resulting society exhibits measurable collective dynamics.
+The central question was:
 
-## 2. Experimental Design
+> If each agent sees only its neighbors' actions and beliefs, can repeated LLM-mediated local updates produce consensus, polarization, or persistent disagreement at the society level?
+
+The experiment was designed to obtain three kinds of evidence:
+
+1. **Macro dynamics:** whether the society converges, polarizes, or remains fragmented.
+2. **Micro-to-macro auditability:** whether each aggregate outcome can be traced back to individual prompts, raw model responses, parsed actions, beliefs, costs, and latencies.
+3. **Operational feasibility:** whether a real paid LLM sweep can run within a small budget without token explosion or schema instability.
+
+## 2. Method
 
 ### 2.1 Environment
 
-- Simulator: `network_herding`.
+The experiment uses the `network_herding` simulator.
+
 - Agents: 30.
-- Graph: small-world topology with degree 4 and rewiring probability 0.1.
-- Initial opinion: Bernoulli action assignment with `probability_a = 0.5`.
-- Scheduler: synchronous rounds.
-- Rounds: 12.
-- Seeds: 1 through 10.
+- Network: small-world graph.
+- Degree: 4.
+- Rewiring probability: 0.1.
+- Initial action assignment: Bernoulli with `probability_a = 0.5`.
+- Scheduler: synchronous update rounds.
+- Rounds per run: 12.
+- Seeds: 10.
 - Maximum LLM decisions: `30 agents * 12 rounds * 10 seeds = 3,600`.
 
 ### 2.2 Agent Policy
 
-Each update is delegated to an OpenAI-compatible chat completion policy:
+Each agent update is delegated to `gpt-5.4-mini`. The prompt contains:
 
-- Provider: OpenAI-compatible endpoint.
-- Base URL: `https://api.openai.com/v1`.
-- Model: `gpt-5.4-mini`.
-- Temperature: 0.0.
-- Maximum completion tokens: 32.
-- Expected response: compact JSON with `action` and `belief_probability`.
+- the agent id;
+- the round index;
+- the agent's current action;
+- the agent's current belief probability;
+- the ids, actions, and belief probabilities of observed neighbors.
 
-The policy records both aggregate usage in `metrics.json` and per-decision traces in `llm_decisions.jsonl`.
+The model is constrained to return compact JSON with:
 
-### 2.3 Budget Control
+- `action`: `A` or `B`;
+- `belief_probability`: a number in `[0, 1]`.
 
-The configured prices are the OpenAI standard prices checked on 2026-06-19:
+The simulator validates and parses the response before updating the agent state.
 
-- Input: `$0.75 / 1M tokens`.
-- Output: `$4.50 / 1M tokens`.
+### 2.3 Audit Trail
 
-The expected call size is approximately 100 input tokens and 20 output tokens. This gives an expected total pilot cost near:
+Every successful LLM decision writes one row to `llm_decisions.jsonl`. Each row includes the prompt, raw provider response, parsed action, parsed belief, token counts, estimated cost, latency, model id, agent id, and round index. This makes the experiment inspectable at both aggregate and individual-decision levels.
 
-```text
-3,600 * (100 * 0.75 + 20 * 4.50) / 1,000,000 = $0.594
-```
+### 2.4 Budget Controls
 
-Safety limits:
+The experiment used fixed low-output settings to prevent runaway cost:
 
-- `max_completion_tokens = 32` prevents long completions.
-- `max_estimated_cost_usd = 0.3` stops a single seed-run if its cumulative cost becomes abnormal.
-- The operator-level total budget is `$3.00`; runs must stop before launching another seed if cumulative estimated cost reaches or exceeds `$3.00`.
+- maximum completion tokens: 32;
+- per-run estimated cost cap: `$0.30`;
+- operator-level budget stop: `$3.00`;
+- actual estimated cost after completion: `$0.631049`.
 
-## 3. Execution Protocol
+No token explosion occurred. Completion tokens per decision ranged from 13 to 22.
 
-Run this only after setting `SOCIETY_SIM_LLM_API_KEY`, or after loading `OPENAI_API_KEY` and mapping it to `SOCIETY_SIM_LLM_API_KEY`:
+## 3. Results
 
-```bash
-set -a
-source /home/jhlee/repo/.env
-set +a
-export SOCIETY_SIM_LLM_API_KEY="$OPENAI_API_KEY"
-./.venv/bin/python -u - <<'PY'
-from pathlib import Path
+### 3.1 Completion and Cost
 
-from society_simulation.runner import run_experiment
-from society_simulation.sweep_artifacts import SweepRunRecord, write_sweep_artifacts
-from society_simulation.sweep_config import build_experiment_config, expand_sweep, load_sweep_config
+All planned runs completed.
 
-BUDGET_USD = 3.0
-SWEEP_PATH = Path("experiments/openai_mini_small_social_herding.json")
-sweep = load_sweep_config(SWEEP_PATH)
-planned_runs = expand_sweep(sweep)
-records = []
-spent = 0.0
+| quantity | value |
+| --- | ---: |
+| completed runs | 10 |
+| failed runs | 0 |
+| LLM decisions | 3,600 |
+| prompt tokens | 511,200 |
+| completion tokens | 55,033 |
+| estimated cost | `$0.631049` |
 
-for planned_run in planned_runs:
-    if spent >= BUDGET_USD:
-        print(f"budget_stop spent=${spent:.6f} budget=${BUDGET_USD:.2f}")
-        break
+### 3.2 Aggregate Outcomes
 
-    config = build_experiment_config(planned_run.config)
-    try:
-        result = run_experiment(config)
-    except Exception as exc:
-        records.append(
-            SweepRunRecord(
-                run_id=planned_run.run_id,
-                labels=planned_run.labels,
-                experiment_name=str(planned_run.config["experiment_name"]),
-                output_dir=planned_run.config["output_dir"],
-                status="failed",
-                error=str(exc),
-                metrics={},
-            )
-        )
-        write_sweep_artifacts(sweep, planned_runs, tuple(records))
-        print(f"failed {planned_run.run_id} error={exc}")
-        break
-
-    usage = result.metrics.get("llm_usage", {})
-    run_cost = float(usage.get("total_cost_usd", 0.0))
-    spent += run_cost
-    status = "completed"
-    error = None
-    if spent >= BUDGET_USD:
-        status = "failed"
-        error = f"budget exceeded after run: spent ${spent:.6f} >= ${BUDGET_USD:.2f}"
-
-    records.append(
-        SweepRunRecord(
-            run_id=planned_run.run_id,
-            labels=planned_run.labels,
-            experiment_name=config.experiment_name,
-            output_dir=result.output_dir,
-            status=status,
-            error=error,
-            metrics=result.metrics,
-        )
-    )
-    write_sweep_artifacts(sweep, planned_runs, tuple(records))
-    print(
-        f"completed {planned_run.run_id} "
-        f"calls={usage.get('calls')} "
-        f"prompt_tokens={usage.get('prompt_tokens')} "
-        f"completion_tokens={usage.get('completion_tokens')} "
-        f"run_cost=${run_cost:.6f} cumulative=${spent:.6f}"
-    )
-
-    if spent >= BUDGET_USD:
-        print(f"budget_stop spent=${spent:.6f} budget=${BUDGET_USD:.2f}")
-        break
-
-print(
-    f"finished completed={sum(1 for r in records if r.status == 'completed')} "
-    f"failed={sum(1 for r in records if r.status == 'failed')} "
-    f"planned={len(planned_runs)} spent=${spent:.6f}"
-)
-PY
-```
-
-## 4. Planned Analysis
-
-Primary outcomes:
-
-- `consensus_reached`: whether all agents converge to one action.
-- `consensus_action`: whether consensus favors A or B.
-- `time_to_consensus`: first round at which consensus appears.
-- `final_a_fraction`: final population share choosing A.
-- `polarization_index`: final belief mass near extremes.
-- `edge_disagreement_rate`: fraction of graph edges connecting disagreeing actions.
-
-Audit-level checks:
-
-- JSON parse success rate.
-- Distribution of `prompt_tokens` and `completion_tokens`.
-- Per-call latency distribution.
-- Relationship between neighbor-majority exposure and parsed action.
-- Cases where the LLM preserves its current action against local majority pressure.
-
-## 5. Results
-
-### 5.1 Execution Summary
-
-The experiment was launched on 2026-06-19 with `OPENAI_API_KEY` loaded from `/home/jhlee/repo/.env`. All 10 planned seeds completed.
-
-```text
-starting sweep=openai_mini_small_social_herding planned_runs=10 budget=$3.00
-completed seed-1 calls=360 prompt_tokens=51120 completion_tokens=5488 run_cost=$0.063036 cumulative=$0.063036
-completed seed-2 calls=360 prompt_tokens=51120 completion_tokens=5604 run_cost=$0.063558 cumulative=$0.126594
-completed seed-3 calls=360 prompt_tokens=51120 completion_tokens=5488 run_cost=$0.063036 cumulative=$0.189630
-completed seed-4 calls=360 prompt_tokens=51120 completion_tokens=5557 run_cost=$0.063347 cumulative=$0.252977
-completed seed-5 calls=360 prompt_tokens=51120 completion_tokens=5577 run_cost=$0.063437 cumulative=$0.316413
-completed seed-6 calls=360 prompt_tokens=51120 completion_tokens=5466 run_cost=$0.062937 cumulative=$0.379350
-completed seed-7 calls=360 prompt_tokens=51120 completion_tokens=5474 run_cost=$0.062973 cumulative=$0.442323
-completed seed-8 calls=360 prompt_tokens=51120 completion_tokens=5528 run_cost=$0.063216 cumulative=$0.505539
-completed seed-9 calls=360 prompt_tokens=51120 completion_tokens=5436 run_cost=$0.062802 cumulative=$0.568341
-completed seed-10 calls=360 prompt_tokens=51120 completion_tokens=5415 run_cost=$0.062708 cumulative=$0.631049
-finished completed=10 failed=0 planned=10 spent=$0.631049
-```
-
-### 5.2 Aggregate Outcome
-
-- Completed runs: 10.
-- Failed runs: 0.
-- Successful LLM decisions: 3,600.
-- Prompt tokens: 511,200.
-- Completion tokens: 55,033.
-- Estimated simulator cost: `$0.631049`.
-- Mean final A fraction: 0.9633.
-- Consensus runs: 8 of 10.
-- Mean consensus time among consensus runs: 6.25 rounds.
-- Mean final edge disagreement rate: 0.0233.
-- Mean final polarization index: 0.1291.
+| metric | value |
+| --- | ---: |
+| consensus runs | 8 / 10 |
+| mean final A fraction | 0.9633 |
+| mean edge disagreement rate | 0.0233 |
+| mean polarization index | 0.1291 |
+| mean time to consensus among consensus runs | 6.25 rounds |
 
 Per-seed outcomes:
 
@@ -218,11 +108,11 @@ Per-seed outcomes:
 | 9 | 0.5000 | 1.0000 | yes | 3 | 0.0000 |
 | 10 | 0.5667 | 1.0000 | yes | 2 | 0.0000 |
 
-The two non-consensus runs are scientifically useful: both began with A as a minority or weak minority, yet moved to large A majorities by round 12. This suggests the current LLM policy is not merely preserving initial population proportions.
+The two non-consensus runs are informative. Both began with A as a minority or weak minority, yet ended with A as a strong majority. The process is therefore not merely preserving the initial population split.
 
-### 5.3 Round-Level Dynamics
+### 3.3 Round-Level Dynamics
 
-Aggregating over all seeds, A share increased monotonically after the first LLM update:
+Aggregated across all seeds, A share increased monotonically after the first LLM update.
 
 | round | A actions | B actions | A fraction | mean belief |
 | ---: | ---: | ---: | ---: | ---: |
@@ -239,55 +129,82 @@ Aggregating over all seeds, A share increased monotonically after the first LLM 
 | 11 | 287 | 13 | 0.9567 | 0.9617 |
 | 12 | 289 | 11 | 0.9633 | 0.9672 |
 
-### 5.4 Decision Audit
+### 3.4 Decision-Level Findings
 
-The decision audit contains one JSONL row per completed LLM decision.
+The model's local response rule was asymmetric.
 
-- Rows: 3,600.
-- Parsed actions: 3,241 A, 359 B.
-- Prompt tokens per call: min 114, mean 142.0, median 142, max 170.
-- Completion tokens per call: min 13, mean 15.29, median 15, max 22.
-- Cost per call: min `$0.000144`, mean `$0.000175`, max `$0.0002115`.
-- Latency per call: min 453 ms, mean 940 ms, median 764 ms, max 11.86 s.
+| neighborhood condition | cases | followed local majority | defied local majority |
+| --- | ---: | ---: | ---: |
+| A-majority neighborhood | 2,997 | 2,990 | 7 |
+| B-majority neighborhood | 322 | 242 | 80 |
 
-Neighbor-majority response:
+Tied-neighbor observations occurred 281 times. In 242 of those cases, the model preserved the agent's current action.
 
-- A-majority observations: 2,997; LLM followed A 2,990 times and defied 7 times.
-- B-majority observations: 322; LLM followed B 242 times and defied 80 times.
-- Tied-neighbor observations: 281; LLM preserved its current action 242 times.
+This asymmetry is the main pilot finding. Under the current prompt and action schema, the model is nearly deterministic when local social evidence favors A, but much more willing to defect from B-majority neighborhoods. This provides a plausible mechanism for the observed A drift.
 
-This asymmetry is the strongest pilot finding. Under the current prompt, `gpt-5.4-mini` is nearly deterministic when neighbors favor A, but substantially more willing to defect from a B-majority neighborhood. That directional bias can explain why A grows even in seeds where A begins as a minority.
+### 3.5 Token and Latency Profile
 
-### 5.5 Artifacts
+| quantity | min | mean | median | max |
+| --- | ---: | ---: | ---: | ---: |
+| prompt tokens per decision | 114 | 142.00 | 142 | 170 |
+| completion tokens per decision | 13 | 15.29 | 15 | 22 |
+| cost per decision | `$0.000144` | `$0.000175` | `$0.000174` | `$0.0002115` |
+| latency per decision | 453 ms | 940 ms | 764 ms | 11.86 s |
 
-The resulting sweep artifacts were written:
+The cost profile is stable enough for larger pilot sweeps.
+
+## 4. Interpretation
+
+This experiment provides evidence that local LLM interactions can generate macro-level herding dynamics. The system does not need global information, a central planner, or explicit consensus instructions to move toward aggregate agreement.
+
+However, the observed outcome is not yet evidence of a general social law. The action labels A and B are semantically empty. A directional preference for A may come from model priors, prompt wording, action ordering, JSON formatting conventions, or parser/schema artifacts. Therefore the most important result is not "LLM societies converge to A." The stronger and more defensible result is:
+
+> In this audited setting, local LLM decision rules can create strong aggregate herding, and the audit trail reveals a label-asymmetric micro-mechanism that plausibly drives the macro outcome.
+
+## 5. Limitations
+
+This is a pilot study, not an ICLR-ready final result.
+
+Major limitations:
+
+- only one model family;
+- only one topology class;
+- only 10 seeds;
+- no action-label randomization;
+- no A/B label swap;
+- no prompt ablation;
+- no comparison against non-LLM baselines in the same report;
+- no external empirical validation;
+- no news shocks or time-varying media environment.
+
+These limitations are not cosmetic. Without label randomization and baseline comparison, the observed A drift cannot be interpreted as a robust social-scientific phenomenon.
+
+## 6. Next Experiments
+
+The next experiment should not simply add more seeds. It should directly test the mechanism exposed by the audit trail.
+
+Priority ablations:
+
+1. Swap the order and semantic presentation of A and B.
+2. Randomize action labels per run.
+3. Compare against mock-neighbor-majority, threshold, and DeGroot policies.
+4. Repeat the same setting with cheaper OpenAI-compatible models.
+5. Add exogenous news shocks and measure whether local LLM agents amplify, dampen, or polarize around them.
+6. Run topology sweeps over cycle, complete, small-world, and Erdős-Rényi graphs.
+
+These experiments would turn the pilot into a defensible study of how local LLM cognition scales into crowd-level dynamics.
+
+## 7. Reproducibility
+
+The registered experiment configuration is:
+
+- `experiments/openai_mini_small_social_herding.json`
+
+The sweep artifacts are:
 
 - `runs/sweeps/openai_mini_small_social_herding/sweep_config.json`
 - `runs/sweeps/openai_mini_small_social_herding/manifest.jsonl`
 - `runs/sweeps/openai_mini_small_social_herding/summary.csv`
 - `runs/sweeps/openai_mini_small_social_herding/summary.json`
 - `runs/sweeps/openai_mini_small_social_herding/analysis/report.md`
-- per-seed `llm_decisions.jsonl` audit logs under `runs/sweeps/openai_mini_small_social_herding/runs/seed-*`
-
-## 6. Discussion
-
-This pilot is designed as a falsifiable systems check. It answers a narrow version of the scientific question: a small population of LLM agents, exposed only to local social observations, can produce robust macroscopic herding under repeated interaction. In this setup, that herding is strongly directional: almost every run moves toward A, and 8 of 10 runs reach unanimous A consensus.
-
-The directional result should not yet be interpreted as a general law of LLM societies. The action labels A and B are semantically empty, so the asymmetry may arise from model priors over labels, JSON examples in pretraining, prompt wording, or the parser/action schema. A publishable result would need label randomization, A/B label swapping, non-LLM baselines, multiple model families, more seeds, topology sweeps, initial-condition sweeps, and exogenous news-shock conditions.
-
-The most useful next study is therefore not simply "more seeds." It is an ablation suite:
-
-- swap the meanings/order of A and B;
-- randomize action labels per run;
-- compare `gpt-5.4-mini` against mock-neighbor-majority, threshold, and DeGroot policies;
-- run the same design on cheap OpenAI-compatible Chinese models;
-- add news shocks and measure whether local LLM agents amplify or dampen the shock.
-
-This pilot provides the first real-money, audited evidence that the infrastructure can execute such studies at modest cost.
-
-## 7. Reproducibility Artifacts
-
-- Config: `experiments/openai_mini_small_social_herding.json`.
-- Expected sweep output: `runs/sweeps/openai_mini_small_social_herding`.
-- Per-run artifacts: `config.json`, `graph.json`, `steps.jsonl`, `timeseries.jsonl`, `metrics.json`, `llm_decisions.jsonl`, `summary.txt`.
-- Sweep artifacts: `sweep_config.json`, `manifest.jsonl`, `summary.csv`, `summary.json`.
+- per-seed replay and `llm_decisions.jsonl` files under `runs/sweeps/openai_mini_small_social_herding/runs/seed-*`
