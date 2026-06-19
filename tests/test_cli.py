@@ -216,6 +216,41 @@ def test_example_openai_compatible_network_config_exists_and_is_valid() -> None:
     assert config.update_policy.api_key_env == "SOCIETY_SIM_LLM_API_KEY"
 
 
+def test_cli_runs_event_driven_opinion_config_and_prints_event_summary(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from tests.test_event_config import valid_event_config
+
+    config_path = tmp_path / "event.json"
+    output_dir = tmp_path / "event-run"
+    data = valid_event_config(tmp_path)
+    data["output_dir"] = str(output_dir)
+    config_path.write_text(json.dumps(data), encoding="utf-8")
+
+    exit_code = cli.main(["run", str(config_path)])
+
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert "experiment=event_driven_opinion_dynamics" in output
+    assert "final_private_stance_mean=" in output
+    assert "final_public_stance_mean=" in output
+    assert "final_private_public_gap=" in output
+    assert "llm_calls=" in output
+    assert f"output_dir={output_dir}" in output
+    assert (output_dir / "summary.md").exists()
+
+
+def test_event_driven_congestion_pricing_experiment_exists_and_is_valid() -> None:
+    from society_simulation.event_config import EventDrivenOpinionConfig
+    from society_simulation.config import load_config
+
+    config = load_config("experiments/event_driven_congestion_pricing.json")
+
+    assert isinstance(config, EventDrivenOpinionConfig)
+    assert config.experiment_name == "event_driven_opinion_dynamics"
+
+
 @pytest.mark.parametrize("error", [OSError("disk full"), ValueError("bad run")])
 def test_cli_run_runtime_failures_report_experiment_run_error(
     tmp_path: Path,

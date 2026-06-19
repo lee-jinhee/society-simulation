@@ -31,6 +31,10 @@ def _print_llm_usage(metrics: dict[str, object]) -> None:
     print(f"llm_estimated_cost_usd={float(llm_usage.get('total_cost_usd', 0.0)):.8f}")
 
 
+def _has_event_summary_metrics(metrics: dict[str, object]) -> bool:
+    return "final_private_stance_mean" in metrics
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="society-sim")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -52,14 +56,21 @@ def _run_single_config(parser: argparse.ArgumentParser, config_path: str) -> int
     try:
         result = run_experiment(config)
         metrics = result.metrics
-        action_counts = _require_action_counts(metrics)
+        action_counts = (
+            None if _has_event_summary_metrics(metrics) else _require_action_counts(metrics)
+        )
     except (OSError, ValueError) as exc:
         parser.error(f"Experiment run failed for '{config_path}': {exc}")
 
     print(f"experiment={config.experiment_name}")
     if hasattr(result, "true_state"):
         print(f"true_state={result.true_state}")
-    print(f"action_counts={action_counts}")
+    if _has_event_summary_metrics(metrics):
+        print(f"final_private_stance_mean={metrics['final_private_stance_mean']}")
+        print(f"final_public_stance_mean={metrics['final_public_stance_mean']}")
+        print(f"final_private_public_gap={metrics['final_private_public_gap']}")
+    else:
+        print(f"action_counts={action_counts}")
     if "correct_cascade" in metrics:
         print(f"correct_cascade={metrics['correct_cascade']}")
     if "wrong_cascade" in metrics:

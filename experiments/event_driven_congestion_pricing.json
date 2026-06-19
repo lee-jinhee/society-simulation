@@ -1,0 +1,309 @@
+{
+  "agents": [
+    {
+      "agent_id": "jisoo",
+      "age": 37,
+      "communication_style": "careful",
+      "core_values": [
+        "fairness",
+        "public health"
+      ],
+      "household_context": "single parent with a late shift schedule",
+      "initial_confidence": 0.35,
+      "initial_private_stance": -0.1,
+      "initial_public_stance": 0.0,
+      "initial_salience": 0.45,
+      "material_interests": [
+        "commute time",
+        "hospital access"
+      ],
+      "media_habits": [
+        "local_news",
+        "neighborhood_group_chat"
+      ],
+      "name": "Jisoo Park",
+      "neighborhood": "east side",
+      "occupation": "hospital nurse",
+      "political_trust": 0.45,
+      "susceptibilities": [
+        "coworker stories",
+        "patient access concerns"
+      ]
+    },
+    {
+      "agent_id": "minho",
+      "age": 42,
+      "communication_style": "direct",
+      "core_values": [
+        "work",
+        "family budget"
+      ],
+      "household_context": "married with two children",
+      "initial_confidence": 0.55,
+      "initial_private_stance": -0.45,
+      "initial_public_stance": -0.25,
+      "initial_salience": 0.7,
+      "material_interests": [
+        "fuel cost",
+        "delivery time"
+      ],
+      "media_habits": [
+        "local_news",
+        "driver_forum",
+        "neighborhood_group_chat"
+      ],
+      "name": "Minho Lee",
+      "neighborhood": "west side",
+      "occupation": "delivery driver",
+      "political_trust": 0.25,
+      "susceptibilities": [
+        "small business stories",
+        "driver forum posts"
+      ]
+    },
+    {
+      "agent_id": "amara",
+      "age": 29,
+      "communication_style": "analytical",
+      "core_values": [
+        "climate",
+        "evidence"
+      ],
+      "household_context": "rents near a transit hub",
+      "initial_confidence": 0.6,
+      "initial_private_stance": 0.45,
+      "initial_public_stance": 0.35,
+      "initial_salience": 0.65,
+      "material_interests": [
+        "air quality",
+        "bus reliability"
+      ],
+      "media_habits": [
+        "policy_newsletter",
+        "local_news"
+      ],
+      "name": "Amara Johnson",
+      "neighborhood": "central district",
+      "occupation": "urban planning analyst",
+      "political_trust": 0.7,
+      "susceptibilities": [
+        "emissions data",
+        "transit funding details"
+      ]
+    },
+    {
+      "agent_id": "carlos",
+      "age": 51,
+      "communication_style": "pragmatic",
+      "core_values": [
+        "small business",
+        "predictability"
+      ],
+      "household_context": "supports an elderly parent",
+      "initial_confidence": 0.5,
+      "initial_private_stance": -0.25,
+      "initial_public_stance": -0.1,
+      "initial_salience": 0.55,
+      "material_interests": [
+        "customer traffic",
+        "supplier costs"
+      ],
+      "media_habits": [
+        "business_association_email",
+        "local_news"
+      ],
+      "name": "Carlos Rivera",
+      "neighborhood": "downtown",
+      "occupation": "cafe owner",
+      "political_trust": 0.4,
+      "susceptibilities": [
+        "merchant testimony",
+        "permit changes"
+      ]
+    },
+    {
+      "agent_id": "mei",
+      "age": 68,
+      "communication_style": "reflective",
+      "core_values": [
+        "accessibility",
+        "community stability"
+      ],
+      "household_context": "retired and cares for grandchildren twice a week",
+      "initial_confidence": 0.4,
+      "initial_private_stance": 0.05,
+      "initial_public_stance": 0.0,
+      "initial_salience": 0.5,
+      "material_interests": [
+        "medical appointments",
+        "bus fares"
+      ],
+      "media_habits": [
+        "community_radio",
+        "neighborhood_group_chat"
+      ],
+      "name": "Mei Chen",
+      "neighborhood": "north end",
+      "occupation": "retired teacher",
+      "political_trust": 0.5,
+      "susceptibilities": [
+        "senior access stories",
+        "radio interviews"
+      ]
+    }
+  ],
+  "channels": [
+    {
+      "channel_id": "neighborhood_group_chat",
+      "type": "group_chat"
+    },
+    {
+      "channel_id": "driver_forum",
+      "type": "forum"
+    },
+    {
+      "channel_id": "business_association_email",
+      "type": "email_list"
+    },
+    {
+      "channel_id": "community_radio",
+      "type": "broadcast"
+    }
+  ],
+  "days": 5,
+  "events": [
+    {
+      "affected_interests": [
+        "commute time",
+        "air quality",
+        "bus reliability"
+      ],
+      "audience_filter": {
+        "media_habits_any": [
+          "local_news",
+          "policy_newsletter"
+        ]
+      },
+      "content": "City Hall proposes a weekday downtown congestion charge with transit discounts funded by the revenue.",
+      "credibility": 0.8,
+      "day": 1,
+      "emotional_intensity": 0.25,
+      "event_id": "city_announcement",
+      "policy_stance": 0.35,
+      "source": "City Hall",
+      "source_type": "official",
+      "title": "City announces congestion charge proposal"
+    },
+    {
+      "affected_interests": [
+        "delivery time",
+        "fuel cost",
+        "customer traffic"
+      ],
+      "audience_filter": {
+        "media_habits_any": [
+          "driver_forum",
+          "business_association_email"
+        ]
+      },
+      "content": "Drivers and merchants circulate examples of added delivery fees and worry about fewer downtown visits.",
+      "credibility": 0.55,
+      "day": 2,
+      "emotional_intensity": 0.55,
+      "event_id": "business_pushback",
+      "policy_stance": -0.45,
+      "source": "Small Business Coalition",
+      "source_type": "advocacy_group",
+      "title": "Businesses warn about delivery and foot traffic costs"
+    },
+    {
+      "affected_interests": [
+        "air quality",
+        "hospital access",
+        "bus fares"
+      ],
+      "audience_filter": {
+        "media_habits_any": [
+          "community_radio",
+          "local_news",
+          "neighborhood_group_chat"
+        ]
+      },
+      "content": "A neighborhood forum highlights cleaner air benefits while asking for medical appointment exemptions.",
+      "credibility": 0.7,
+      "day": 4,
+      "emotional_intensity": 0.35,
+      "event_id": "community_forum",
+      "policy_stance": 0.2,
+      "source": "Community Mobility Forum",
+      "source_type": "community_group",
+      "title": "Residents debate exemptions and transit investment"
+    }
+  ],
+  "experiment_name": "event_driven_opinion_dynamics",
+  "output_dir": "artifacts/event_driven_congestion_pricing",
+  "relationships": [
+    {
+      "channels": [
+        "neighborhood_group_chat"
+      ],
+      "conflict_sensitivity": 0.5,
+      "conversation_frequency": "medium",
+      "relationship_type": "neighbor",
+      "source_agent_id": "jisoo",
+      "target_agent_id": "minho",
+      "trust": 0.6
+    },
+    {
+      "channels": [
+        "neighborhood_group_chat",
+        "community_radio"
+      ],
+      "conflict_sensitivity": 0.35,
+      "conversation_frequency": "medium",
+      "relationship_type": "neighbor",
+      "source_agent_id": "jisoo",
+      "target_agent_id": "mei",
+      "trust": 0.7
+    },
+    {
+      "channels": [
+        "driver_forum"
+      ],
+      "conflict_sensitivity": 0.6,
+      "conversation_frequency": "high",
+      "relationship_type": "work_contact",
+      "source_agent_id": "minho",
+      "target_agent_id": "carlos",
+      "trust": 0.55
+    },
+    {
+      "channels": [
+        "business_association_email"
+      ],
+      "conflict_sensitivity": 0.45,
+      "conversation_frequency": "medium",
+      "relationship_type": "business_contact",
+      "source_agent_id": "carlos",
+      "target_agent_id": "amara",
+      "trust": 0.4
+    },
+    {
+      "channels": [
+        "neighborhood_group_chat"
+      ],
+      "conflict_sensitivity": 0.4,
+      "conversation_frequency": "low",
+      "relationship_type": "civic_group",
+      "source_agent_id": "amara",
+      "target_agent_id": "mei",
+      "trust": 0.65
+    }
+  ],
+  "scenario_name": "congestion_pricing",
+  "seed": 23,
+  "update_policy": {
+    "response_style": "balanced",
+    "type": "mock_persona"
+  }
+}

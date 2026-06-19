@@ -81,6 +81,12 @@ def test_write_sweep_artifacts_writes_manifest_csv_and_summary_json(
         "mean_belief",
         "edge_disagreement_rate",
         "component_count",
+        "final_private_stance_mean",
+        "final_public_stance_mean",
+        "final_private_public_gap",
+        "final_mean_confidence",
+        "final_mean_salience",
+        "message_count",
     ]
     assert rows[0]["run_id"] == planned_runs[0].run_id
     assert rows[0]["status"] == "completed"
@@ -224,3 +230,49 @@ def test_write_sweep_artifacts_accepts_action_counts_metric_fallback(
         rows = list(csv.DictReader(handle))
     assert rows[0]["final_action_counts_A"] == "1"
     assert rows[0]["final_action_counts_B"] == "2"
+
+
+def test_write_sweep_artifacts_includes_event_driven_opinion_metrics(
+    tmp_path: Path,
+) -> None:
+    sweep = parse_sweep_config(valid_sweep_dict(tmp_path))
+    planned_runs = expand_sweep(sweep)
+    records = (
+        SweepRunRecord(
+            run_id=planned_runs[0].run_id,
+            labels=planned_runs[0].labels,
+            experiment_name="event_driven_opinion_dynamics",
+            output_dir=planned_runs[0].config["output_dir"],
+            status="completed",
+            error=None,
+            metrics={
+                "final_private_stance_mean": 0.2,
+                "final_public_stance_mean": 0.1,
+                "final_private_public_gap": 0.1,
+                "final_mean_confidence": 0.7,
+                "final_mean_salience": 0.8,
+                "message_count": 5,
+            },
+        ),
+    )
+
+    paths = write_sweep_artifacts(sweep, planned_runs, records)
+
+    manifest_row = json.loads(paths.manifest_path.read_text(encoding="utf-8").splitlines()[0])
+    assert manifest_row["final_private_stance_mean"] == 0.2
+    assert manifest_row["final_public_stance_mean"] == 0.1
+    assert manifest_row["final_private_public_gap"] == 0.1
+    assert manifest_row["final_mean_confidence"] == 0.7
+    assert manifest_row["final_mean_salience"] == 0.8
+    assert manifest_row["message_count"] == 5
+
+    with paths.summary_csv_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        rows = list(reader)
+    assert "final_private_stance_mean" in (reader.fieldnames or [])
+    assert rows[0]["final_private_stance_mean"] == "0.2"
+    assert rows[0]["final_mean_salience"] == "0.8"
+    assert rows[0]["message_count"] == "5"
+
+    summary = json.loads(paths.summary_json_path.read_text(encoding="utf-8"))
+    assert summary["metric_means"]["final_private_stance_mean"] == 0.2

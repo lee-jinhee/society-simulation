@@ -21,6 +21,12 @@ METRIC_FIELDS = (
     "mean_belief",
     "edge_disagreement_rate",
     "component_count",
+    "final_private_stance_mean",
+    "final_public_stance_mean",
+    "final_private_public_gap",
+    "final_mean_confidence",
+    "final_mean_salience",
+    "message_count",
 )
 NUMERIC_MEAN_FIELDS = (
     "final_a_fraction",
@@ -30,6 +36,12 @@ NUMERIC_MEAN_FIELDS = (
     "mean_belief",
     "edge_disagreement_rate",
     "component_count",
+    "final_private_stance_mean",
+    "final_public_stance_mean",
+    "final_private_public_gap",
+    "final_mean_confidence",
+    "final_mean_salience",
+    "message_count",
 )
 MANIFEST_FIELDS = (
     "run_id",
