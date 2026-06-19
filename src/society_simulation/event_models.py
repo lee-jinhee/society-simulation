@@ -71,6 +71,24 @@ def _require_str_tuple(value: object, field_name: str) -> tuple[str, ...]:
     )
 
 
+def _copy_audience_filter_value(value: object) -> object:
+    if isinstance(value, dict):
+        return {key: _copy_audience_filter_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return tuple(_copy_audience_filter_value(item) for item in value)
+    return value
+
+
+def _to_json_ready(value: object) -> object:
+    if isinstance(value, dict):
+        return {key: _to_json_ready(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_to_json_ready(item) for item in value]
+    if isinstance(value, list):
+        return [_to_json_ready(item) for item in value]
+    return value
+
+
 @dataclass(frozen=True)
 class EventAgentState:
     agent_id: str
@@ -377,7 +395,7 @@ class OpinionEvent:
                 _require_field(data, "affected_interests"),
                 "affected_interests",
             ),
-            audience_filter=dict(audience_filter),
+            audience_filter=audience_filter,
         )
 
     def __post_init__(self) -> None:
@@ -411,10 +429,28 @@ class OpinionEvent:
             "affected_interests",
             _require_str_tuple(self.affected_interests, "affected_interests"),
         )
-        object.__setattr__(self, "audience_filter", dict(self.audience_filter))
+        if not isinstance(self.audience_filter, dict):
+            raise ValueError("audience_filter must be an object")
+        object.__setattr__(
+            self,
+            "audience_filter",
+            _copy_audience_filter_value(self.audience_filter),
+        )
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        return {
+            "event_id": self.event_id,
+            "day": self.day,
+            "title": self.title,
+            "source": self.source,
+            "source_type": self.source_type,
+            "content": self.content,
+            "policy_stance": self.policy_stance,
+            "credibility": self.credibility,
+            "emotional_intensity": self.emotional_intensity,
+            "affected_interests": list(self.affected_interests),
+            "audience_filter": _to_json_ready(self.audience_filter),
+        }
 
 
 @dataclass(frozen=True)

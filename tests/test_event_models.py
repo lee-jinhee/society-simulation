@@ -56,6 +56,21 @@ def _valid_agent_state_kwargs() -> dict[str, object]:
     }
 
 
+def _valid_event_kwargs() -> dict[str, object]:
+    return {
+        "event_id": "city_announcement",
+        "day": 1,
+        "title": "City announces downtown congestion charge",
+        "source": "City Hall",
+        "source_type": "official",
+        "content": "The city proposes a weekday downtown congestion charge.",
+        "policy_stance": 0.35,
+        "credibility": 0.8,
+        "emotional_intensity": 0.2,
+        "affected_interests": ["commute time", "public health"],
+    }
+
+
 def test_agent_profile_from_dict_validates_required_fields() -> None:
     profile = EventAgentProfile.from_dict(
         {
@@ -79,6 +94,10 @@ def test_agent_profile_from_dict_validates_required_fields() -> None:
     )
 
     assert profile.agent_id == "jisoo"
+    assert profile.core_values == ("fairness", "public health")
+    assert profile.material_interests == ("commute time",)
+    assert profile.media_habits == ("local_news", "neighborhood_group_chat")
+    assert profile.susceptibilities == ("coworker stories",)
     initial_state = profile.initial_state(day=0)
     assert initial_state.private_stance == -0.1
     assert initial_state.emotion == "calm"
@@ -144,24 +163,66 @@ def test_relationship_from_dict_round_trips() -> None:
 
 
 def test_event_from_dict_supports_audience_filter() -> None:
-    event = OpinionEvent.from_dict(
-        {
-            "event_id": "city_announcement",
-            "day": 1,
-            "title": "City announces downtown congestion charge",
-            "source": "City Hall",
-            "source_type": "official",
-            "content": "The city proposes a weekday downtown congestion charge.",
-            "policy_stance": 0.35,
-            "credibility": 0.8,
-            "emotional_intensity": 0.2,
-            "affected_interests": ["commute time", "public health"],
-            "audience_filter": {"media_habits_any": ["local_news"]},
-        }
-    )
+    event_data = _valid_event_kwargs()
+    event_data["audience_filter"] = {"media_habits_any": ["local_news"]}
+    event = OpinionEvent.from_dict(event_data)
 
     assert event.day == 1
-    assert event.audience_filter == {"media_habits_any": ["local_news"]}
+    assert event.audience_filter == {"media_habits_any": ("local_news",)}
+    assert event.to_dict()["audience_filter"] == {"media_habits_any": ["local_news"]}
+    assert event.to_dict()["affected_interests"] == ["commute time", "public health"]
+
+
+def test_event_from_dict_defaults_missing_audience_filter_to_empty_dict() -> None:
+    event = OpinionEvent.from_dict(_valid_event_kwargs())
+
+    assert event.audience_filter == {}
+    assert event.to_dict()["audience_filter"] == {}
+
+
+@pytest.mark.parametrize(
+    "audience_filter",
+    [
+        "local_news",
+        [("media_habits_any", ["local_news"])],
+    ],
+)
+def test_event_rejects_non_dict_audience_filter(audience_filter: object) -> None:
+    event_kwargs = _valid_event_kwargs()
+    event_kwargs["audience_filter"] = audience_filter
+
+    with pytest.raises(ValueError, match="audience_filter must be an object"):
+        OpinionEvent(**event_kwargs)  # type: ignore[arg-type]
+
+
+def test_event_from_dict_rejects_non_dict_audience_filter() -> None:
+    event_data = _valid_event_kwargs()
+    event_data["audience_filter"] = "local_news"
+
+    with pytest.raises(ValueError, match="audience_filter must be an object"):
+        OpinionEvent.from_dict(event_data)
+
+
+def test_event_defensively_copies_audience_filter() -> None:
+    audience_filter = {
+        "media_habits_any": ["local_news"],
+        "nested": {"channels": ["group_chat"]},
+    }
+    event_kwargs = _valid_event_kwargs()
+    event_kwargs["audience_filter"] = audience_filter
+    event = OpinionEvent(**event_kwargs)  # type: ignore[arg-type]
+
+    audience_filter["media_habits_any"].append("cable_news")
+    audience_filter["nested"]["channels"].append("newspaper")
+
+    assert event.audience_filter == {
+        "media_habits_any": ("local_news",),
+        "nested": {"channels": ("group_chat",)},
+    }
+    assert event.to_dict()["audience_filter"] == {
+        "media_habits_any": ["local_news"],
+        "nested": {"channels": ["group_chat"]},
+    }
 
 
 def test_exposure_message_and_state_to_dict_are_json_ready() -> None:
