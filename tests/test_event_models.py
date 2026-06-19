@@ -18,16 +18,42 @@ def test_validate_stance_accepts_minus_one_to_one() -> None:
     assert validate_stance(1.0, "private_stance") == 1.0
 
 
-@pytest.mark.parametrize("value", [-1.1, 1.1, "0.3", True])
+@pytest.mark.parametrize(
+    "value",
+    [-1.1, 1.1, "0.3", True, float("nan"), float("inf"), float("-inf")],
+)
 def test_validate_stance_rejects_invalid_values(value: object) -> None:
     with pytest.raises(ValueError, match="private_stance must be a number between -1 and 1"):
         validate_stance(value, "private_stance")
 
 
-@pytest.mark.parametrize("value", [-0.1, 1.1, "0.3", True])
+def test_validate_probability_accepts_zero_to_one() -> None:
+    assert validate_probability(0, "confidence") == 0.0
+    assert validate_probability(0.5, "confidence") == 0.5
+    assert validate_probability(1.0, "confidence") == 1.0
+
+
+@pytest.mark.parametrize(
+    "value",
+    [-0.1, 1.1, "0.3", True, float("nan"), float("inf"), float("-inf")],
+)
 def test_validate_probability_rejects_invalid_values(value: object) -> None:
     with pytest.raises(ValueError, match="confidence must be a number between 0 and 1"):
         validate_probability(value, "confidence")
+
+
+def _valid_agent_state_kwargs() -> dict[str, object]:
+    return {
+        "agent_id": "jisoo",
+        "day": 2,
+        "private_stance": -0.25,
+        "public_stance": 0.0,
+        "confidence": 0.52,
+        "salience": 0.77,
+        "emotion": "worried",
+        "memory_summary": "Jisoo is worried about commute costs.",
+        "last_private_reasoning": "The taxi story felt concrete.",
+    }
 
 
 def test_agent_profile_from_dict_validates_required_fields() -> None:
@@ -53,8 +79,50 @@ def test_agent_profile_from_dict_validates_required_fields() -> None:
     )
 
     assert profile.agent_id == "jisoo"
-    assert profile.initial_state(day=0).private_stance == -0.1
+    initial_state = profile.initial_state(day=0)
+    assert initial_state.private_stance == -0.1
+    assert initial_state.emotion == "calm"
+    assert initial_state.memory_summary
+    assert initial_state.last_private_reasoning
     assert profile.to_dict()["name"] == "Jisoo Park"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("private_stance", 1.1, "private_stance must be a number between -1 and 1"),
+        ("public_stance", -1.1, "public_stance must be a number between -1 and 1"),
+        ("confidence", -0.1, "confidence must be a number between 0 and 1"),
+        ("salience", float("inf"), "salience must be a number between 0 and 1"),
+    ],
+)
+def test_agent_state_rejects_invalid_stance_and_probability_fields(
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    state_kwargs = _valid_agent_state_kwargs()
+    state_kwargs[field] = value
+
+    with pytest.raises(ValueError, match=message):
+        EventAgentState(**state_kwargs)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("field", "message"),
+    [
+        ("agent_id", "agent_id must be a non-empty string"),
+        ("emotion", "emotion must be a non-empty string"),
+        ("memory_summary", "memory_summary must be a non-empty string"),
+        ("last_private_reasoning", "last_private_reasoning must be a non-empty string"),
+    ],
+)
+def test_agent_state_rejects_empty_strings(field: str, message: str) -> None:
+    state_kwargs = _valid_agent_state_kwargs()
+    state_kwargs[field] = ""
+
+    with pytest.raises(ValueError, match=message):
+        EventAgentState(**state_kwargs)  # type: ignore[arg-type]
 
 
 def test_relationship_from_dict_round_trips() -> None:
@@ -112,17 +180,7 @@ def test_exposure_message_and_state_to_dict_are_json_ready() -> None:
         recipient_agent_id=None,
         text="This fee sounds rough for shift workers.",
     )
-    state = EventAgentState(
-        agent_id="jisoo",
-        day=2,
-        private_stance=-0.25,
-        public_stance=0.0,
-        confidence=0.52,
-        salience=0.77,
-        emotion="worried",
-        memory_summary="Jisoo is worried about commute costs.",
-        last_private_reasoning="The taxi story felt concrete.",
-    )
+    state = EventAgentState(**_valid_agent_state_kwargs())  # type: ignore[arg-type]
 
     assert exposure.to_dict()["source_id"] == "taxi_story"
     assert message.to_dict()["recipient_agent_id"] is None
