@@ -6,6 +6,8 @@ import random
 from typing import Any
 
 from society_simulation.config import Config, ExperimentConfig, NetworkHerdingConfig
+from society_simulation.event_config import EventDrivenOpinionConfig
+from society_simulation.event_runner import EventRunResult, run_event_driven_opinion_dynamics
 from society_simulation.metrics import compute_metrics
 from society_simulation.models import Action, AgentProfile, AgentState
 from society_simulation.network_runner import NetworkRunResult, run_network_herding
@@ -23,9 +25,11 @@ class RunResult:
     output_dir: Path
 
 
-def run_experiment(config: Config) -> RunResult | NetworkRunResult:
+def run_experiment(config: Config) -> RunResult | NetworkRunResult | EventRunResult:
     if isinstance(config, NetworkHerdingConfig):
         return run_network_herding(config)
+    if isinstance(config, EventDrivenOpinionConfig):
+        return run_event_driven_opinion_dynamics(config)
     return run_sequential_information_cascade(config)
 
 
