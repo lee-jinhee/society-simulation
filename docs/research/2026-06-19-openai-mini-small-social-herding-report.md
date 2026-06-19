@@ -4,11 +4,11 @@ Date: 2026-06-19
 
 ## Status
 
-Registered report draft. The paid OpenAI run has not executed because neither `SOCIETY_SIM_LLM_API_KEY` nor `OPENAI_API_KEY` is present in the current shell environment.
+Registered pilot with attempted execution. `OPENAI_API_KEY` was loaded from `/home/jhlee/repo/.env` and mapped to `SOCIETY_SIM_LLM_API_KEY`, but OpenAI rejected the first request with `HTTP 429 insufficient_quota`. No successful LLM decision was produced, no token usage was recorded by the simulator, and the estimated experiment cost remained `$0.000000`.
 
 ## Abstract
 
-This pilot asks whether a population of LLM-controlled agents, each observing only its network neighbors' previous actions and beliefs, converges to collective consensus under repeated synchronous interaction. We instantiate 30 agents on a small-world graph, run 12 update rounds, and repeat the experiment over 10 random seeds using `gpt-5.4-mini`. The simulator records every model decision, prompt, raw response, parsed action, token count, and estimated call-level cost. The central measurement is not whether the model is individually rational, but whether locally conditioned LLM responses produce macroscopic crowd dynamics such as consensus, polarization, or persistent disagreement. Results are pending API-key availability.
+This pilot asks whether a population of LLM-controlled agents, each observing only its network neighbors' previous actions and beliefs, converges to collective consensus under repeated synchronous interaction. We instantiate 30 agents on a small-world graph, run 12 update rounds, and repeat the experiment over 10 random seeds using `gpt-5.4-mini`. The simulator records every model decision, prompt, raw response, parsed action, token count, and estimated call-level cost. The central measurement is not whether the model is individually rational, but whether locally conditioned LLM responses produce macroscopic crowd dynamics such as consensus, polarization, or persistent disagreement. Execution was attempted, but the provider quota blocked the first request before any decision-level data could be collected.
 
 ## 1. Introduction
 
@@ -63,11 +63,14 @@ Safety limits:
 
 ## 3. Execution Protocol
 
-Run this only after setting `SOCIETY_SIM_LLM_API_KEY`:
+Run this only after setting `SOCIETY_SIM_LLM_API_KEY`, or after loading `OPENAI_API_KEY` and mapping it to `SOCIETY_SIM_LLM_API_KEY`:
 
 ```bash
-export SOCIETY_SIM_LLM_API_KEY="..."
-./.venv/bin/python - <<'PY'
+set -a
+source /home/jhlee/repo/.env
+set +a
+export SOCIETY_SIM_LLM_API_KEY="$OPENAI_API_KEY"
+./.venv/bin/python -u - <<'PY'
 from pathlib import Path
 
 from society_simulation.runner import run_experiment
@@ -138,7 +141,11 @@ for planned_run in planned_runs:
         print(f"budget_stop spent=${spent:.6f} budget=${BUDGET_USD:.2f}")
         break
 
-print(f"finished completed={len(records)} planned={len(planned_runs)} spent=${spent:.6f}")
+print(
+    f"finished completed={sum(1 for r in records if r.status == 'completed')} "
+    f"failed={sum(1 for r in records if r.status == 'failed')} "
+    f"planned={len(planned_runs)} spent=${spent:.6f}"
+)
 PY
 ```
 
@@ -163,21 +170,41 @@ Audit-level checks:
 
 ## 5. Results
 
-Pending. No paid API calls were made in this session because the required API key was not available.
+### 5.1 Execution Attempt
 
-Preflight outcome:
+The experiment was launched on 2026-06-19 with `OPENAI_API_KEY` loaded from `/home/jhlee/repo/.env`. The run stopped on the first seed before completing any LLM-backed agent decision.
 
 ```text
-ValueError SOCIETY_SIM_LLM_API_KEY is required for llm provider
+starting sweep=openai_mini_small_social_herding planned_runs=10 budget=$3.00
+failed seed-1 error=ValueError: llm provider request failed with HTTP 429: insufficient_quota
+finished completed=0 failed=1 planned=10 spent=$0.000000
 ```
 
-This failure occurs before any OpenAI request is constructed, so it does not incur API cost.
+### 5.2 Outcome
+
+- Completed runs: 0.
+- Failed runs: 1.
+- Pending runs: 9.
+- Successful LLM decisions: 0.
+- Recorded prompt tokens: 0.
+- Recorded completion tokens: 0.
+- Estimated simulator cost: `$0.000000`.
+- Stopping reason: provider quota rejection before the first completed response.
+
+The resulting sweep artifacts were still written:
+
+- `runs/sweeps/openai_mini_small_social_herding/sweep_config.json`
+- `runs/sweeps/openai_mini_small_social_herding/manifest.jsonl`
+- `runs/sweeps/openai_mini_small_social_herding/summary.csv`
+- `runs/sweeps/openai_mini_small_social_herding/summary.json`
+
+No per-run `llm_decisions.jsonl` artifact exists because the first LLM decision did not complete.
 
 ## 6. Discussion
 
-This pilot is designed as a falsifiable systems check. A publishable result would require stronger baselines, larger sweeps, prompt variants, model-family comparisons, and external validation against empirical social data. The immediate scientific value is narrower: it tests whether a real LLM can be embedded as an auditable local decision rule without uncontrolled cost or schema instability.
+This pilot is designed as a falsifiable systems check. The current attempt does not answer the scientific question because provider quota blocked inference before any agent decision completed. It does validate one operational property: the budgeted runner fails closed, writes sweep-level failure artifacts, and does not continue launching additional seeds after a provider-level error.
 
-If the pilot completes within budget and produces stable decision records, the next study should compare real LLM agents against mock-neighbor-majority, threshold, and DeGroot baselines across topology, initial polarization, and exogenous news shocks.
+A publishable result would require successful provider access, stronger baselines, larger sweeps, prompt variants, model-family comparisons, and external validation against empirical social data. If the pilot completes within budget and produces stable decision records after quota is resolved, the next study should compare real LLM agents against mock-neighbor-majority, threshold, and DeGroot baselines across topology, initial polarization, and exogenous news shocks.
 
 ## 7. Reproducibility Artifacts
 
