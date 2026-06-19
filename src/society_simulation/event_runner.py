@@ -158,11 +158,15 @@ def _channel_members(config: EventDrivenOpinionConfig) -> dict[str, set[str]]:
 
 
 def _channel_ids(config: EventDrivenOpinionConfig) -> set[str]:
-    return {
-        channel["channel_id"]
+    return set(_configured_channel_ids(config))
+
+
+def _configured_channel_ids(config: EventDrivenOpinionConfig) -> tuple[str, ...]:
+    return tuple(
+        channel_id
         for channel in config.channels
-        if isinstance(channel.get("channel_id"), str)
-    }
+        if isinstance((channel_id := channel.get("channel_id")), str)
+    )
 
 
 def _build_event_policy(config: EventDrivenOpinionConfig) -> object:
@@ -170,6 +174,7 @@ def _build_event_policy(config: EventDrivenOpinionConfig) -> object:
     if policy["type"] == "mock_persona":
         return MockPersonaPolicy(
             response_style=policy.get("response_style", "balanced"),  # type: ignore[arg-type]
+            configured_channels=_configured_channel_ids(config),
             input_cost_per_1m_tokens=policy.get("input_cost_per_1m_tokens", 0.0),  # type: ignore[arg-type]
             output_cost_per_1m_tokens=policy.get("output_cost_per_1m_tokens", 0.0),  # type: ignore[arg-type]
         )

@@ -55,6 +55,21 @@ def test_event_runner_is_deterministic_for_mock_policy(tmp_path: Path) -> None:
     ).read_text(encoding="utf-8")
 
 
+def test_mock_policy_uses_configured_non_chat_channel(tmp_path: Path) -> None:
+    data = valid_event_config(tmp_path)
+    data["output_dir"] = str(tmp_path / "renamed-channel")
+    data["channels"] = [{"channel_id": "community_forum", "type": "group_chat"}]
+    for agent in data["agents"]:  # type: ignore[index]
+        agent["media_habits"] = ["local_news", "community_forum"]  # type: ignore[index]
+    for relationship in data["relationships"]:  # type: ignore[index]
+        relationship["channels"] = ["community_forum"]  # type: ignore[index]
+
+    result = run_experiment(EventDrivenOpinionConfig.from_dict(data))
+
+    assert result.messages
+    assert {message.channel for message in result.messages} == {"community_forum"}
+
+
 def test_event_runner_exposes_only_previous_day_messages(tmp_path: Path) -> None:
     data = valid_event_config(tmp_path)
     data["output_dir"] = str(tmp_path / "previous-day")

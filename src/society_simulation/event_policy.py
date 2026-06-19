@@ -108,6 +108,7 @@ class MockPersonaPolicy:
         response_style: str = "balanced",
         provider: str = "mock",
         model: str | None = None,
+        configured_channels: Sequence[str] = (),
         input_cost_per_1m_tokens: float = 0.0,
         output_cost_per_1m_tokens: float = 0.0,
     ) -> None:
@@ -119,6 +120,7 @@ class MockPersonaPolicy:
         self.response_style = response_style
         self.provider = provider
         self.model = model or f"mock-persona-{response_style}"
+        self.configured_channels = tuple(configured_channels)
         self.pricing = LLMPricing(
             input_cost_per_1m_tokens=input_cost_per_1m_tokens,
             output_cost_per_1m_tokens=output_cost_per_1m_tokens,
@@ -187,7 +189,7 @@ class MockPersonaPolicy:
         confidence = _clamp_probability(current_state.confidence + (0.05 if exposures else 0.0))
         messages: list[dict[str, str | None]] = []
         if self.response_style != "silent":
-            channel = _group_chat_channel(profile)
+            channel = _mock_message_channel(profile, self.configured_channels)
             messages.append(
                 {
                     "channel": channel,
@@ -602,7 +604,15 @@ def _mock_memory_update(profile: EventAgentProfile, exposures: Sequence[EventExp
     return f"{profile.name} considered new local policy information."
 
 
-def _group_chat_channel(profile: EventAgentProfile) -> str:
+def _mock_message_channel(
+    profile: EventAgentProfile,
+    configured_channels: Sequence[str],
+) -> str:
+    for channel in profile.media_habits:
+        if channel in configured_channels:
+            return channel
+    if configured_channels:
+        return configured_channels[0]
     for channel in profile.media_habits:
         if "chat" in channel:
             return channel
