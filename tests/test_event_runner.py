@@ -55,6 +55,42 @@ def test_event_runner_is_deterministic_for_mock_policy(tmp_path: Path) -> None:
     ).read_text(encoding="utf-8")
 
 
+def test_event_runner_writes_empty_memory_artifacts_when_disabled(tmp_path: Path) -> None:
+    data = valid_event_config(tmp_path)
+    data["memory_retrieval"] = {"enabled": False, "limit": 3}
+    data["output_dir"] = str(tmp_path / "memory-disabled")
+
+    result = run_experiment(EventDrivenOpinionConfig.from_dict(data))
+
+    assert result.metrics["memory_count"] == 0
+    assert (result.output_dir / "memories.jsonl").read_text(encoding="utf-8") == ""
+    assert (result.output_dir / "retrievals.jsonl").read_text(encoding="utf-8") == ""
+
+
+def test_event_runner_records_memories_and_retrievals_when_enabled(tmp_path: Path) -> None:
+    data = valid_event_config(tmp_path)
+    data["memory_retrieval"] = {"enabled": True, "limit": 2}
+    data["output_dir"] = str(tmp_path / "memory-enabled")
+
+    result = run_experiment(EventDrivenOpinionConfig.from_dict(data))
+
+    assert result.metrics["memory_count"] > 0
+    assert result.metrics["retrieval_count"] > 0
+    memory_rows = [
+        json.loads(line)
+        for line in (result.output_dir / "memories.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    retrieval_rows = [
+        json.loads(line)
+        for line in (result.output_dir / "retrievals.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert memory_rows
+    assert retrieval_rows
+    assert {"agent_id", "day", "query", "retrieved"} <= retrieval_rows[0].keys()
+
+
 def test_mock_policy_uses_configured_non_chat_channel(tmp_path: Path) -> None:
     data = valid_event_config(tmp_path)
     data["output_dir"] = str(tmp_path / "renamed-channel")
