@@ -135,7 +135,6 @@ class MockPersonaPolicy:
         day: int,
     ) -> EventPolicyDecision:
         prompt = _event_prompt(profile, current_state, exposures)
-        started_at = time.perf_counter()
         response_content = self._response_content(profile, current_state, exposures)
         decision = parse_event_decision_content(
             response_content,
@@ -144,7 +143,6 @@ class MockPersonaPolicy:
         )
         prompt_tokens = estimate_tokens(prompt)
         completion_tokens = estimate_tokens(response_content)
-        latency_ms = (time.perf_counter() - started_at) * 1000
         self.usage.record(
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
@@ -163,7 +161,7 @@ class MockPersonaPolicy:
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 pricing=self.pricing,
-                latency_ms=latency_ms,
+                latency_ms=0.0,
             )
         )
         return decision

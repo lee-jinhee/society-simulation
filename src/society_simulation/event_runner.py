@@ -33,11 +33,14 @@ def run_event_driven_opinion_dynamics(config: EventDrivenOpinionConfig) -> Event
     all_messages: list[EventMessage] = []
     for day in range(1, config.days + 1):
         previous_states = {state.agent_id: state for state in states_by_day[-1]}
+        previous_day_messages = tuple(
+            message for message in all_messages if message.day == day - 1
+        )
         day_exposures = build_day_exposures(
             day=day,
             agents=config.agents,
             events=config.events,
-            previous_messages=tuple(all_messages),
+            previous_messages=previous_day_messages,
             channel_members=channel_members,
         )
         all_exposures.extend(day_exposures)
@@ -99,9 +102,12 @@ def _build_event_policy(config: EventDrivenOpinionConfig) -> object:
         )
 
     api_key_env = str(policy.get("api_key_env", "SOCIETY_SIM_LLM_API_KEY"))
+    api_key = os.environ.get(api_key_env, "")
+    if not api_key:
+        raise ValueError(f"{api_key_env} environment variable is required for llm policy")
     return OpenAICompatiblePersonaPolicy(
         model=str(policy["model"]),
-        api_key=os.environ.get(api_key_env, ""),
+        api_key=api_key,
         base_url=str(policy.get("base_url", "https://api.openai.com/v1")),
         temperature=float(policy.get("temperature", 0.0)),
         max_completion_tokens=int(policy.get("max_completion_tokens", 160)),
