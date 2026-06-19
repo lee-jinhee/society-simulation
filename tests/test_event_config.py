@@ -105,6 +105,46 @@ def test_event_config_to_dict_round_trips(tmp_path: Path) -> None:
     assert round_tripped.to_dict() == payload
 
 
+def test_event_config_defaults_memory_retrieval_disabled(tmp_path: Path) -> None:
+    config = EventDrivenOpinionConfig.from_dict(valid_event_config(tmp_path))
+
+    assert config.memory_retrieval == {
+        "enabled": False,
+        "limit": 5,
+    }
+
+
+def test_event_config_accepts_memory_retrieval_settings(tmp_path: Path) -> None:
+    data = valid_event_config(tmp_path)
+    data["memory_retrieval"] = {"enabled": True, "limit": 3}
+
+    config = EventDrivenOpinionConfig.from_dict(data)
+
+    assert config.memory_retrieval == {"enabled": True, "limit": 3}
+    assert config.to_dict()["memory_retrieval"] == {"enabled": True, "limit": 3}
+
+
+@pytest.mark.parametrize(
+    ("memory_retrieval", "message"),
+    [
+        ({"enabled": "yes", "limit": 3}, "memory_retrieval.enabled must be a boolean"),
+        ({"enabled": True, "limit": 0}, "memory_retrieval.limit must be positive"),
+        ({"enabled": True, "limit": True}, "memory_retrieval.limit must be an integer"),
+        ({"enabled": True, "unknown": 1}, "unsupported memory_retrieval key: unknown"),
+    ],
+)
+def test_event_config_rejects_invalid_memory_retrieval(
+    tmp_path: Path,
+    memory_retrieval: dict[str, object],
+    message: str,
+) -> None:
+    data = valid_event_config(tmp_path)
+    data["memory_retrieval"] = memory_retrieval
+
+    with pytest.raises(ValueError, match=message):
+        EventDrivenOpinionConfig.from_dict(data)
+
+
 def test_event_config_freezes_update_policy_after_construction(tmp_path: Path) -> None:
     config = EventDrivenOpinionConfig.from_dict(valid_event_config(tmp_path))
 

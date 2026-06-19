@@ -6,6 +6,7 @@ import pytest
 from tests.test_event_config import valid_event_config
 
 from society_simulation.event_config import EventDrivenOpinionConfig
+from society_simulation.event_memory import RetrievedMemory, SocialMemory
 from society_simulation.event_models import EventExposure, EventMessage
 from society_simulation.event_replay import EventReplayWriter
 
@@ -130,6 +131,60 @@ def test_event_replay_writer_writes_empty_llm_decisions_file(tmp_path: Path) -> 
     decisions_path = output_dir / "llm_decisions.jsonl"
     assert decisions_path.exists()
     assert decisions_path.read_text(encoding="utf-8") == ""
+
+
+def test_event_replay_writer_writes_memory_artifacts(tmp_path: Path) -> None:
+    inputs = _replay_inputs(tmp_path)
+    config = inputs["config"]
+    assert isinstance(config, EventDrivenOpinionConfig)
+    social_memory = SocialMemory(
+        memory_id="jisoo:1:event:city",
+        agent_id="jisoo",
+        day=1,
+        kind="event_exposure",
+        text="City announcement",
+        source_id="city",
+        source_type="event",
+        channel="news_feed",
+        related_agent_ids=(),
+        related_event_ids=("city",),
+        stance_signal=0.2,
+        emotional_intensity=0.3,
+        source_trust=0.8,
+        identity_relevance=0.6,
+        importance=0.7,
+        private=False,
+    )
+
+    output_dir = EventReplayWriter(config).write(
+        states_by_day=inputs["states_by_day"],
+        exposures=inputs["exposures"],
+        messages=inputs["messages"],
+        metrics=inputs["metrics"],
+        llm_decisions=(),
+        memories=(social_memory,),
+        retrievals=(
+            {
+                "agent_id": "jisoo",
+                "day": 1,
+                "query": {"agent_id": "jisoo"},
+                "retrieved": [
+                    RetrievedMemory(social_memory, 1, 1, 1, 1, 1, 1, 1).to_dict()
+                ],
+            },
+        ),
+    )
+
+    memory_rows = [
+        json.loads(line)
+        for line in (output_dir / "memories.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    retrieval_rows = [
+        json.loads(line)
+        for line in (output_dir / "retrievals.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert memory_rows[0]["memory_id"] == "jisoo:1:event:city"
+    assert retrieval_rows[0]["retrieved"][0]["memory"]["memory_id"] == "jisoo:1:event:city"
 
 
 def test_event_replay_writer_overwrites_stale_llm_decisions(tmp_path: Path) -> None:

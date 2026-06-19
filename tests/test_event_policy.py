@@ -4,6 +4,7 @@ from inspect import signature
 import pytest
 
 from society_simulation.event_models import EventAgentProfile, EventAgentState, EventExposure
+from society_simulation.event_memory import SocialMemory
 from society_simulation.event_policy import (
     MockPersonaPolicy,
     OpenAICompatiblePersonaPolicy,
@@ -116,6 +117,20 @@ def test_mock_persona_policy_silent_style_posts_no_messages() -> None:
     policy = MockPersonaPolicy(response_style="silent")
 
     decision = policy.decide(profile(), state(), (exposure(),), day=1)
+
+    assert decision.messages == ()
+
+
+def test_mock_persona_policy_accepts_retrieved_memories() -> None:
+    policy = MockPersonaPolicy(response_style="silent")
+
+    decision = policy.decide(
+        profile(),
+        state(),
+        (exposure(),),
+        day=1,
+        retrieved_memories=(),
+    )
 
     assert decision.messages == ()
 
@@ -235,6 +250,61 @@ def test_openai_compatible_persona_policy_includes_message_constraints() -> None
     assert "At most one message" in prompt_text
     assert "private_reasoning under 280 characters" in prompt_text
     assert "message text under 180 characters" in prompt_text
+
+
+def test_openai_compatible_persona_policy_includes_retrieved_memories() -> None:
+    captured: dict[str, object] = {}
+
+    def transport(
+        url: str,
+        headers: dict[str, str],
+        payload: dict[str, object],
+        timeout_seconds: float,
+    ) -> dict[str, object]:
+        del url, headers, timeout_seconds
+        captured["payload"] = payload
+        return {
+            "choices": [{"message": {"content": llm_decision_content()}}],
+            "usage": {"prompt_tokens": 100, "completion_tokens": 40},
+        }
+
+    remembered = SocialMemory(
+        memory_id="m1",
+        agent_id="jisoo",
+        day=1,
+        kind="event_exposure",
+        text="You remember a public-health report about asthma near schools.",
+        source_id="public_health_report",
+        source_type="event",
+        channel="news_feed",
+        related_agent_ids=(),
+        related_event_ids=("public_health_report",),
+        stance_signal=0.5,
+        emotional_intensity=0.4,
+        source_trust=0.8,
+        identity_relevance=0.9,
+        importance=0.8,
+        private=False,
+    )
+    policy = OpenAICompatiblePersonaPolicy(
+        model="cheap-chat",
+        api_key="secret-key",
+        base_url="https://example.test/v1",
+        transport=transport,
+    )
+
+    policy.decide(
+        profile(),
+        state(),
+        (exposure(),),
+        day=2,
+        retrieved_memories=(remembered,),
+    )
+
+    prompt_text = json.dumps(captured["payload"])
+    assert "Things you currently remember" in prompt_text
+    assert "public-health report about asthma" in prompt_text
+    assert "retrieval" not in prompt_text.lower()
 
 
 def test_openai_compatible_persona_policy_redacts_secret_keys_and_auth_patterns() -> None:

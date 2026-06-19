@@ -20,6 +20,8 @@ class EventReplayWriter:
         messages: tuple[EventMessage, ...],
         metrics: dict[str, Any],
         llm_decisions: tuple[dict[str, Any], ...],
+        memories: tuple[object, ...] = (),
+        retrievals: tuple[dict[str, Any], ...] = (),
     ) -> Path:
         output_dir = Path(self.config.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -54,6 +56,11 @@ class EventReplayWriter:
         )
         self._write_json(output_dir / "metrics.json", metrics)
         self._write_jsonl(output_dir / "llm_decisions.jsonl", llm_decisions)
+        self._write_jsonl(
+            output_dir / "memories.jsonl",
+            tuple(_json_ready_record(memory) for memory in memories),
+        )
+        self._write_jsonl(output_dir / "retrievals.jsonl", retrievals)
         self._write_summary(output_dir / "summary.md", metrics)
         return output_dir
 
@@ -80,3 +87,14 @@ class EventReplayWriter:
             f"- final_private_public_gap: `{metrics.get('final_private_public_gap')}`",
         ]
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _json_ready_record(value: object) -> dict[str, Any]:
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        data = to_dict()
+    else:
+        data = value
+    if not isinstance(data, dict):
+        raise ValueError("replay records must serialize to objects")
+    return data

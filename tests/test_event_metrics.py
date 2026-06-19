@@ -3,6 +3,7 @@ import json
 import pytest
 
 from society_simulation.event_metrics import compute_event_metrics, compute_event_timeseries
+from society_simulation.event_memory import SocialMemory
 from society_simulation.event_models import EventAgentState, EventMessage
 
 
@@ -97,6 +98,47 @@ def test_compute_event_metrics_uses_final_day() -> None:
     assert metrics["final_mean_confidence"] == pytest.approx(0.8)
     assert metrics["final_mean_salience"] == pytest.approx(0.4)
     assert metrics["timeseries"][-1]["message_count"] == 1
+
+
+def test_compute_event_metrics_includes_memory_summary() -> None:
+    states_by_day = ((state("jisoo", 0, -0.1, 0.0),),)
+    memories = (
+        SocialMemory(
+            memory_id="m1",
+            agent_id="jisoo",
+            day=0,
+            kind="self_reasoning",
+            text="private concern",
+            source_id="decision",
+            source_type="self",
+            channel="internal",
+            related_agent_ids=(),
+            related_event_ids=(),
+            stance_signal=-0.1,
+            emotional_intensity=0.4,
+            source_trust=1.0,
+            identity_relevance=0.8,
+            importance=0.7,
+            private=True,
+        ),
+    )
+    retrievals = (
+        {
+            "agent_id": "jisoo",
+            "day": 0,
+            "query": {},
+            "retrieved": [{"score": 0.75, "memory": {"kind": "self_reasoning"}}],
+        },
+    )
+
+    metrics = compute_event_metrics(states_by_day, (), memories=memories, retrievals=retrievals)
+
+    assert metrics["memory_count"] == 1
+    assert metrics["private_memory_count"] == 1
+    assert metrics["public_memory_count"] == 0
+    assert metrics["retrieval_count"] == 1
+    assert metrics["mean_retrieved_memories_per_decision"] == pytest.approx(1.0)
+    assert metrics["mean_retrieval_score"] == pytest.approx(0.75)
 
 
 def test_compute_event_timeseries_rejects_mixed_day_bucket() -> None:

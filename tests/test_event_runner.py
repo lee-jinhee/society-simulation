@@ -55,6 +55,85 @@ def test_event_runner_is_deterministic_for_mock_policy(tmp_path: Path) -> None:
     ).read_text(encoding="utf-8")
 
 
+def test_event_runner_writes_empty_memory_artifacts_when_disabled(tmp_path: Path) -> None:
+    data = valid_event_config(tmp_path)
+    data["memory_retrieval"] = {"enabled": False, "limit": 3}
+    data["output_dir"] = str(tmp_path / "memory-disabled")
+
+    result = run_experiment(EventDrivenOpinionConfig.from_dict(data))
+
+    assert result.metrics["memory_count"] == 0
+    assert (result.output_dir / "memories.jsonl").read_text(encoding="utf-8") == ""
+    assert (result.output_dir / "retrievals.jsonl").read_text(encoding="utf-8") == ""
+
+
+def test_event_runner_records_memories_and_retrievals_when_enabled(tmp_path: Path) -> None:
+    data = valid_event_config(tmp_path)
+    data["memory_retrieval"] = {"enabled": True, "limit": 2}
+    data["output_dir"] = str(tmp_path / "memory-enabled")
+
+    result = run_experiment(EventDrivenOpinionConfig.from_dict(data))
+
+    assert result.metrics["memory_count"] > 0
+    assert result.metrics["retrieval_count"] > 0
+    memory_rows = [
+        json.loads(line)
+        for line in (result.output_dir / "memories.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    retrieval_rows = [
+        json.loads(line)
+        for line in (result.output_dir / "retrievals.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert memory_rows
+    assert retrieval_rows
+    assert {"agent_id", "day", "query", "retrieved"} <= retrieval_rows[0].keys()
+
+
+def test_event_runner_marks_private_dm_exposure_memories_private(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = valid_event_config(tmp_path)
+    data["days"] = 2
+    data["memory_retrieval"] = {"enabled": True, "limit": 2}
+    data["output_dir"] = str(tmp_path / "private-dm-memory")
+
+    class PrivateMessagePolicy:
+        def decide(self, profile, current_state, exposures, *, day):  # type: ignore[no-untyped-def]
+            del exposures
+            message = ()
+            if profile.agent_id == "jisoo" and day == 1:
+                message = (
+                    EventMessage(
+                        day=day,
+                        sender_agent_id="jisoo",
+                        channel="neighborhood_group_chat",
+                        recipient_agent_id="minho",
+                        text="I am privately worried about hospital access.",
+                    ),
+                )
+            return EventPolicyDecision(
+                state=_copy_state(current_state, day=day),
+                messages=message,
+            )
+
+    monkeypatch.setattr(event_runner, "_build_event_policy", lambda config: PrivateMessagePolicy())
+
+    result = run_experiment(EventDrivenOpinionConfig.from_dict(data))
+
+    private_dm_memories = [
+        memory
+        for memory in result.memories
+        if memory.kind == "social_message"
+        and memory.agent_id == "minho"
+        and "privately worried" in memory.text
+    ]
+    assert private_dm_memories
+    assert all(memory.private for memory in private_dm_memories)
+
+
 def test_mock_policy_uses_configured_non_chat_channel(tmp_path: Path) -> None:
     data = valid_event_config(tmp_path)
     data["output_dir"] = str(tmp_path / "renamed-channel")

@@ -284,6 +284,30 @@ def _normalize_llm_update_policy(policy: dict[str, object]) -> dict[str, object]
     return normalized
 
 
+def _normalize_memory_retrieval(value: object | None) -> Mapping[str, object]:
+    if value is None:
+        return MappingProxyType({"enabled": False, "limit": 5})
+
+    data = dict(_require_free_form_mapping(value, "memory_retrieval"))
+    for key in data:
+        if not isinstance(key, str):
+            raise ValueError("object keys must be strings")
+        if key not in {"enabled", "limit"}:
+            raise ValueError(f"unsupported memory_retrieval key: {key}")
+
+    enabled = data.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ValueError("memory_retrieval.enabled must be a boolean")
+
+    limit = data.get("limit", 5)
+    if isinstance(limit, bool) or not isinstance(limit, int):
+        raise ValueError("memory_retrieval.limit must be an integer")
+    if limit <= 0:
+        raise ValueError("memory_retrieval.limit must be positive")
+
+    return MappingProxyType({"enabled": enabled, "limit": limit})
+
+
 @dataclass(frozen=True)
 class EventDrivenOpinionConfig:
     experiment_name: str
@@ -295,6 +319,7 @@ class EventDrivenOpinionConfig:
     events: tuple[OpinionEvent, ...]
     channels: tuple[Mapping[str, object], ...]
     update_policy: Mapping[str, object]
+    memory_retrieval: Mapping[str, object]
     output_dir: str
 
     def __post_init__(self) -> None:
@@ -304,6 +329,11 @@ class EventDrivenOpinionConfig:
             tuple(_freeze_json_mapping(channel, "channel") for channel in self.channels),
         )
         object.__setattr__(self, "update_policy", _normalize_update_policy(self.update_policy))
+        object.__setattr__(
+            self,
+            "memory_retrieval",
+            _normalize_memory_retrieval(self.memory_retrieval),
+        )
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> EventDrivenOpinionConfig:
@@ -328,6 +358,7 @@ class EventDrivenOpinionConfig:
             update_policy=_parse_update_policy(
                 _require_field(data, "update_policy", "update_policy")
             ),
+            memory_retrieval=_normalize_memory_retrieval(data.get("memory_retrieval")),
             output_dir=_require_non_empty_str(
                 _require_field(data, "output_dir", "output_dir"),
                 "output_dir",
@@ -403,5 +434,6 @@ class EventDrivenOpinionConfig:
             "events": [event.to_dict() for event in self.events],
             "channels": [_to_json_ready_mapping(channel) for channel in self.channels],
             "update_policy": _to_json_ready_mapping(self.update_policy),
+            "memory_retrieval": _to_json_ready_mapping(self.memory_retrieval),
             "output_dir": self.output_dir,
         }

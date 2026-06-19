@@ -56,15 +56,35 @@ def compute_event_timeseries(
 def compute_event_metrics(
     states_by_day: tuple[tuple[EventAgentState, ...], ...],
     messages: tuple[EventMessage, ...],
+    *,
+    memories: tuple[object, ...] = (),
+    retrievals: tuple[dict[str, Any], ...] = (),
 ) -> dict[str, Any]:
     if not states_by_day:
         raise ValueError("states_by_day must not be empty")
     rows = compute_event_timeseries(states_by_day, messages)
     final = rows[-1]
+    retrieval_scores = tuple(
+        float(item["score"])
+        for row in retrievals
+        for item in _retrieved_items(row)
+        if isinstance(item.get("score"), (int, float))
+    )
     return {
         "agent_count": len(states_by_day[-1]),
         "day_count": len(states_by_day),
         "message_count": len(messages),
+        "memory_count": len(memories),
+        "retrieval_count": len(retrievals),
+        "private_memory_count": sum(1 for memory in memories if getattr(memory, "private", False)),
+        "public_memory_count": sum(
+            1 for memory in memories if not getattr(memory, "private", False)
+        ),
+        "mean_retrieved_memories_per_decision": (
+            mean(len(_retrieved_items(row)) for row in retrievals) if retrievals else 0.0
+        ),
+        "mean_retrieval_score": mean(retrieval_scores) if retrieval_scores else 0.0,
+        "retrieval_kind_counts": _retrieval_kind_counts(retrievals),
         "final_private_stance_mean": final["mean_private_stance"],
         "final_public_stance_mean": final["mean_public_stance"],
         "final_private_public_gap": final["mean_private_public_gap"],
@@ -74,3 +94,23 @@ def compute_event_metrics(
         "final_mean_salience": final["mean_salience"],
         "timeseries": rows,
     }
+
+
+def _retrieved_items(row: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    retrieved = row.get("retrieved", ())
+    if not isinstance(retrieved, (list, tuple)):
+        return ()
+    return tuple(item for item in retrieved if isinstance(item, dict))
+
+
+def _retrieval_kind_counts(retrievals: tuple[dict[str, Any], ...]) -> dict[str, int]:
+    counts: Counter[str] = Counter()
+    for row in retrievals:
+        for item in _retrieved_items(row):
+            memory = item.get("memory")
+            if not isinstance(memory, dict):
+                continue
+            kind = memory.get("kind")
+            if isinstance(kind, str):
+                counts[kind] += 1
+    return dict(sorted(counts.items()))
