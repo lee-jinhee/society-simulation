@@ -497,6 +497,10 @@
   ],
   "scenario_name": "congestion_pricing",
   "seed": 23,
+  "memory_retrieval": {
+    "enabled": false,
+    "limit": 5
+  },
   "update_policy": {
     "input_cost_per_1m_tokens": 0.0,
     "output_cost_per_1m_tokens": 0.0,

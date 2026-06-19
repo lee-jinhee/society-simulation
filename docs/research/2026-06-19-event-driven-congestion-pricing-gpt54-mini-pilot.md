@@ -123,6 +123,7 @@ Major limitations:
 - no prompt ablation;
 - no model comparison against Chinese low-cost models;
 - no explicit social pressure manipulation;
+- no social memory retrieval layer; agents saw only current exposures, previous-day messages, and compact state summaries;
 - no external news ingestion.
 
 The run demonstrates feasibility and reveals useful mechanisms, but it does not validate predictive accuracy.
