@@ -37,6 +37,7 @@ def test_run_experiment_dispatches_network_herding(tmp_path: Path) -> None:
     assert result.metrics["final_action_counts"]["A"] + result.metrics["final_action_counts"]["B"] == 6
     assert (result.output_dir / "graph.json").exists()
     assert (result.output_dir / "timeseries.jsonl").exists()
+    assert not (result.output_dir / "llm_decisions.jsonl").exists()
 
 
 def test_network_runner_writes_one_step_per_agent_per_update_round(tmp_path: Path) -> None:
@@ -101,3 +102,34 @@ def test_network_runner_records_mock_llm_usage_metrics(tmp_path: Path) -> None:
 
     metrics_json = json.loads((result.output_dir / "metrics.json").read_text(encoding="utf-8"))
     assert metrics_json["llm_usage"] == usage
+
+
+def test_network_runner_writes_mock_llm_decision_audit_artifact(tmp_path: Path) -> None:
+    config = make_config(
+        tmp_path,
+        update_policy={
+            "type": "mock_llm",
+            "response_style": "current",
+            "input_cost_per_1m_tokens": 1.0,
+            "output_cost_per_1m_tokens": 2.0,
+        },
+        output_name="mock-llm-audit",
+    )
+
+    result = run_experiment(config)
+
+    path = result.output_dir / "llm_decisions.jsonl"
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert len(rows) == config.num_agents * config.scheduler.rounds
+    first_row = rows[0]
+    assert first_row["agent_id"] == 0
+    assert first_row["round_index"] == 1
+    assert first_row["provider"] == "mock"
+    assert first_row["model"] == "mock-current"
+    assert first_row["policy_type"] == "mock_llm"
+    assert first_row["prompt"]
+    assert first_row["raw_response"]
+    assert first_row["parsed_action"] in ("A", "B")
+    assert first_row["prompt_tokens"] > 0
+    assert first_row["completion_tokens"] > 0
+    assert first_row["total_cost_usd"] > 0

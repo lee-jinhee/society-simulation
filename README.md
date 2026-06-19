@@ -32,7 +32,7 @@ Mock LLM network herding smoke test:
 python -m society_simulation run examples/network_herding_mock_llm.json
 ```
 
-The mock LLM path is deterministic and does not call any API. It records estimated prompt tokens, completion tokens, calls, and cost accounting in `metrics.json`; with the included mock config, API cost is `0`.
+The mock LLM path is deterministic and does not call any API. It records estimated prompt tokens, completion tokens, calls, and cost accounting in `metrics.json`; with the included mock config, API cost is `0`. LLM-backed network runs also write `llm_decisions.jsonl` with one row per agent decision, including the prompt, raw response, parsed action, parsed belief, token counts, call-level cost, and latency.
 
 OpenAI-compatible LLM network herding:
 
@@ -64,6 +64,7 @@ Network herding runs write:
 - `steps.jsonl`
 - `timeseries.jsonl`
 - `metrics.json`
+- `llm_decisions.jsonl` when `update_policy.type` is `mock_llm` or `llm`
 - `summary.txt`
 
 Sweep runs write:

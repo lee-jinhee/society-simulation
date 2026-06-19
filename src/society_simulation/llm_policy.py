@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import copy
 from dataclasses import dataclass
 import json
 from math import ceil, isfinite
+import time
 import urllib.error
 import urllib.request
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from society_simulation.models import Action
 from society_simulation.network_models import NetworkDecision, NetworkObservation
@@ -80,6 +82,52 @@ def _validate_observation(observation: NetworkObservation) -> None:
         _validate_action(action)
     for belief in observation.observed_neighbor_beliefs:
         _validate_probability(belief, "belief_probability")
+
+
+def _copy_audit_records(records: list[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
+    return tuple(copy.deepcopy(record) for record in records)
+
+
+def _llm_decision_audit_record(
+    *,
+    observation: NetworkObservation,
+    provider: str,
+    model: str,
+    policy_type: str,
+    prompt: str,
+    raw_response: dict[str, Any],
+    action: Action,
+    belief_probability: float,
+    confidence: float,
+    prompt_tokens: int,
+    completion_tokens: int,
+    pricing: LLMPricing,
+    latency_ms: float,
+    messages: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    input_cost_usd = pricing.input_cost(prompt_tokens)
+    output_cost_usd = pricing.output_cost(completion_tokens)
+    record: dict[str, Any] = {
+        "agent_id": observation.agent_id,
+        "round_index": observation.round_index,
+        "provider": provider,
+        "model": model,
+        "policy_type": policy_type,
+        "prompt": prompt,
+        "raw_response": copy.deepcopy(raw_response),
+        "parsed_action": action,
+        "parsed_belief_probability": belief_probability,
+        "confidence": confidence,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "input_cost_usd": input_cost_usd,
+        "output_cost_usd": output_cost_usd,
+        "total_cost_usd": input_cost_usd + output_cost_usd,
+        "latency_ms": latency_ms,
+    }
+    if messages is not None:
+        record["messages"] = copy.deepcopy(messages)
+    return record
 
 
 @dataclass(frozen=True)
@@ -228,27 +276,53 @@ class MockLLMPolicy:
         )
         self.usage = LLMUsage()
         self._provider = MockLLMProvider(response_style=response_style)
+        self._audit_records: list[dict[str, Any]] = []
 
     def decide(self, observation: NetworkObservation) -> NetworkDecision:
         _validate_observation(observation)
         prompt = self._prompt_from_observation(observation)
+        started_at = time.perf_counter()
         response = self._provider.complete(prompt, observation)
 
         belief = _validate_probability(response.belief_probability, "belief_probability")
         action = _validate_action(response.action)
+        confidence = confidence_from_belief(belief)
+        prompt_tokens = estimate_tokens(prompt)
+        completion_tokens = estimate_tokens(response.response_text)
+        latency_ms = (time.perf_counter() - started_at) * 1000
         self.usage.record(
-            prompt_tokens=estimate_tokens(prompt),
-            completion_tokens=estimate_tokens(response.response_text),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
             pricing=self.pricing,
+        )
+        self._audit_records.append(
+            _llm_decision_audit_record(
+                observation=observation,
+                provider=self.provider,
+                model=self.model,
+                policy_type=self.name,
+                prompt=prompt,
+                raw_response={"content": response.response_text},
+                action=action,
+                belief_probability=belief,
+                confidence=confidence,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                pricing=self.pricing,
+                latency_ms=latency_ms,
+            )
         )
         return NetworkDecision(
             belief_probability=belief,
-            confidence=confidence_from_belief(belief),
+            confidence=confidence,
             action=action,
         )
 
     def usage_summary(self) -> dict[str, object]:
         return self.usage.summary(provider=self.provider, model=self.model)
+
+    def audit_records(self) -> tuple[dict[str, Any], ...]:
+        return _copy_audit_records(self._audit_records)
 
     def _prompt_from_observation(self, observation: NetworkObservation) -> str:
         neighbor_rows = [
@@ -505,6 +579,7 @@ class OpenAICompatibleLLMPolicy:
             )
         )
         self.usage = LLMUsage()
+        self._audit_records: list[dict[str, Any]] = []
         self._client = OpenAICompatibleClient(
             base_url=base_url,
             api_key=api_key,
@@ -525,6 +600,7 @@ class OpenAICompatibleLLMPolicy:
             + self.pricing.input_cost(prompt_tokens_estimate)
         )
 
+        started_at = time.perf_counter()
         response = self._client.create_chat_completion(
             model=self.model,
             messages=messages,
@@ -539,20 +615,43 @@ class OpenAICompatibleLLMPolicy:
             default_prompt_tokens=prompt_tokens_estimate,
             default_completion_tokens=estimate_tokens(content),
         )
+        confidence = confidence_from_belief(belief)
+        latency_ms = (time.perf_counter() - started_at) * 1000
         self.usage.record(
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             pricing=self.pricing,
         )
         self._raise_if_cost_cap_exceeded(self.usage.input_cost_usd + self.usage.output_cost_usd)
+        self._audit_records.append(
+            _llm_decision_audit_record(
+                observation=observation,
+                provider=self.provider,
+                model=self.model,
+                policy_type=self.name,
+                prompt=_messages_text(messages),
+                raw_response=response,
+                action=action,
+                belief_probability=belief,
+                confidence=confidence,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                pricing=self.pricing,
+                latency_ms=latency_ms,
+                messages=messages,
+            )
+        )
         return NetworkDecision(
             belief_probability=belief,
-            confidence=confidence_from_belief(belief),
+            confidence=confidence,
             action=action,
         )
 
     def usage_summary(self) -> dict[str, object]:
         return self.usage.summary(provider=self.provider, model=self.model)
+
+    def audit_records(self) -> tuple[dict[str, Any], ...]:
+        return _copy_audit_records(self._audit_records)
 
     def _raise_if_cost_cap_exceeded(self, estimated_cost_usd: float) -> None:
         if self.max_estimated_cost_usd is None:

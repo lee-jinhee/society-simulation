@@ -65,11 +65,16 @@ def run_network_herding(config: NetworkHerdingConfig) -> NetworkRunResult:
     usage_summary = getattr(policy, "usage_summary", None)
     if callable(usage_summary):
         metrics["llm_usage"] = usage_summary()
+    llm_decisions: tuple[dict[str, Any], ...] = ()
+    audit_records = getattr(policy, "audit_records", None)
+    if callable(audit_records):
+        llm_decisions = audit_records()
     output_dir = NetworkReplayWriter(config).write(
         graph=graph,
         rounds=frozen_rounds,
         timeseries=timeseries,
         metrics=metrics,
+        llm_decisions=llm_decisions,
     )
     return NetworkRunResult(
         graph=graph,

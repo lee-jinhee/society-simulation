@@ -42,10 +42,10 @@
 
 ## Steps
 
-- [ ] Step 1: Add failing policy tests for mock and OpenAI-compatible audit rows.
-- [ ] Step 2: Add failing replay writer and runner tests for `llm_decisions.jsonl`.
-- [ ] Step 3: Implement policy audit record collection and defensive copies.
-- [ ] Step 4: Implement runner handoff and replay writer artifact output.
-- [ ] Step 5: Document the artifact in `README.md`.
-- [ ] Step 6: Run focused tests, then the full suite.
+- [x] Step 1: Add failing policy tests for mock and OpenAI-compatible audit rows.
+- [x] Step 2: Add failing replay writer and runner tests for `llm_decisions.jsonl`.
+- [x] Step 3: Implement policy audit record collection and defensive copies.
+- [x] Step 4: Implement runner handoff and replay writer artifact output.
+- [x] Step 5: Document the artifact in `README.md`.
+- [x] Step 6: Run focused tests, then the full suite.
 - [ ] Step 7: Commit, merge to `main`, and push.

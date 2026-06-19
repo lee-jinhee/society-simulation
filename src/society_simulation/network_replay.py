@@ -30,6 +30,25 @@ _REQUIRED_METRIC_KEYS = (
     "component_count",
 )
 
+_REQUIRED_LLM_DECISION_KEYS = (
+    "agent_id",
+    "round_index",
+    "provider",
+    "model",
+    "policy_type",
+    "prompt",
+    "raw_response",
+    "parsed_action",
+    "parsed_belief_probability",
+    "confidence",
+    "prompt_tokens",
+    "completion_tokens",
+    "input_cost_usd",
+    "output_cost_usd",
+    "total_cost_usd",
+    "latency_ms",
+)
+
 
 class NetworkReplayWriter:
     def __init__(self, config: NetworkHerdingConfig) -> None:
@@ -41,8 +60,11 @@ class NetworkReplayWriter:
         rounds: tuple[tuple[NetworkAgentState, ...], ...],
         timeseries: list[dict[str, Any]],
         metrics: dict[str, Any],
+        llm_decisions: tuple[dict[str, Any], ...] | None = None,
     ) -> Path:
+        decision_rows = tuple(llm_decisions or ())
         self._validate_replay_bundle(graph, rounds, timeseries, metrics)
+        self._validate_llm_decisions(decision_rows)
         output_dir = Path(self.config.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         self._write_json(output_dir / "config.json", self.config.to_dict())
@@ -50,11 +72,18 @@ class NetworkReplayWriter:
         self._write_steps(output_dir / "steps.jsonl", rounds)
         self._write_timeseries(output_dir / "timeseries.jsonl", timeseries)
         self._write_json(output_dir / "metrics.json", metrics)
+        if decision_rows:
+            self._write_jsonl(output_dir / "llm_decisions.jsonl", decision_rows)
         self._write_summary(output_dir / "summary.txt", metrics)
         return output_dir
 
     def _write_json(self, path: Path, payload: dict[str, Any]) -> None:
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    def _write_jsonl(self, path: Path, rows: tuple[dict[str, Any], ...]) -> None:
+        with path.open("w", encoding="utf-8") as handle:
+            for row in rows:
+                handle.write(json.dumps(row, sort_keys=True) + "\n")
 
     def _validate_replay_bundle(
         self,
@@ -92,6 +121,14 @@ class NetworkReplayWriter:
         for key in _REQUIRED_METRIC_KEYS:
             if key not in metrics:
                 raise ValueError(f"metrics is missing required key: {key}")
+
+    def _validate_llm_decisions(self, llm_decisions: tuple[dict[str, Any], ...]) -> None:
+        for index, row in enumerate(llm_decisions):
+            if not isinstance(row, dict):
+                raise ValueError(f"llm_decisions row {index} must be a JSON object")
+            for key in _REQUIRED_LLM_DECISION_KEYS:
+                if key not in row:
+                    raise ValueError(f"llm_decisions row {index} is missing required key: {key}")
 
     def _write_steps(
         self,

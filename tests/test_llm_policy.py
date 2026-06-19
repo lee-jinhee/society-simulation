@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from society_simulation.llm_policy import (
@@ -83,6 +85,50 @@ def test_mock_llm_policy_estimates_cost() -> None:
     )
 
 
+def test_mock_llm_policy_records_decision_audit_rows() -> None:
+    policy = MockLLMPolicy(
+        response_style="current",
+        input_cost_per_1m_tokens=1.0,
+        output_cost_per_1m_tokens=2.0,
+    )
+
+    decision = policy.decide(observation((), (), current_action="B", current_belief=0.2))
+
+    records = policy.audit_records()
+    assert len(records) == 1
+    record = records[0]
+    assert record["agent_id"] == 0
+    assert record["round_index"] == 1
+    assert record["provider"] == "mock"
+    assert record["model"] == "mock-current"
+    assert record["policy_type"] == "mock_llm"
+    assert "current_action=B" in record["prompt"]
+    assert record["raw_response"] == {"content": '{"action":"B","belief_probability":0.2}'}
+    assert record["parsed_action"] == decision.action
+    assert record["parsed_belief_probability"] == pytest.approx(decision.belief_probability)
+    assert record["confidence"] == pytest.approx(decision.confidence)
+    assert record["prompt_tokens"] > 0
+    assert record["completion_tokens"] > 0
+    assert record["input_cost_usd"] > 0
+    assert record["output_cost_usd"] > 0
+    assert record["total_cost_usd"] == pytest.approx(
+        record["input_cost_usd"] + record["output_cost_usd"]
+    )
+    assert record["latency_ms"] >= 0.0
+
+
+def test_llm_policy_audit_records_are_defensive_copies() -> None:
+    policy = MockLLMPolicy(response_style="current")
+    policy.decide(observation((), (), current_action="A", current_belief=0.8))
+
+    records = policy.audit_records()
+    records[0]["raw_response"]["content"] = "changed"  # type: ignore[index]
+
+    assert policy.audit_records()[0]["raw_response"] == {
+        "content": '{"action":"A","belief_probability":0.8}'
+    }
+
+
 def test_mock_llm_policy_rejects_unsupported_provider() -> None:
     with pytest.raises(ValueError, match="unsupported llm provider"):
         MockLLMPolicy(provider="openai")
@@ -151,6 +197,59 @@ def test_openai_compatible_policy_sends_chat_completion_request_and_tracks_provi
     assert usage["input_cost_usd"] == pytest.approx(11 / 1_000_000)
     assert usage["output_cost_usd"] == pytest.approx(14 / 1_000_000)
     assert usage["total_cost_usd"] == pytest.approx(25 / 1_000_000)
+
+
+def test_openai_compatible_policy_records_decision_audit_rows_without_secrets() -> None:
+    def transport(
+        url: str,
+        headers: dict[str, str],
+        payload: dict[str, object],
+        timeout_seconds: float,
+    ) -> dict[str, object]:
+        del url, headers, payload, timeout_seconds
+        return {
+            "id": "chatcmpl-test",
+            "choices": [
+                {"message": {"content": '{"action":"A","belief_probability":0.75}'}}
+            ],
+            "usage": {"prompt_tokens": 11, "completion_tokens": 7},
+        }
+
+    policy = OpenAICompatibleLLMPolicy(
+        model="cheap-chat",
+        api_key="secret-key",
+        base_url="https://example.test/v1",
+        input_cost_per_1m_tokens=1.0,
+        output_cost_per_1m_tokens=2.0,
+        transport=transport,
+    )
+
+    decision = policy.decide(observation(("A", "B"), (1.0, 0.0)))
+
+    records = policy.audit_records()
+    assert len(records) == 1
+    record = records[0]
+    assert record["agent_id"] == 0
+    assert record["round_index"] == 1
+    assert record["provider"] == "openai_compatible"
+    assert record["model"] == "cheap-chat"
+    assert record["policy_type"] == "llm"
+    assert "agent_id=0" in record["prompt"]
+    assert record["messages"][0]["role"] == "system"  # type: ignore[index]
+    assert record["raw_response"]["id"] == "chatcmpl-test"  # type: ignore[index]
+    assert record["parsed_action"] == decision.action
+    assert record["parsed_belief_probability"] == pytest.approx(decision.belief_probability)
+    assert record["confidence"] == pytest.approx(decision.confidence)
+    assert record["prompt_tokens"] == 11
+    assert record["completion_tokens"] == 7
+    assert record["input_cost_usd"] == pytest.approx(11 / 1_000_000)
+    assert record["output_cost_usd"] == pytest.approx(14 / 1_000_000)
+    assert record["total_cost_usd"] == pytest.approx(25 / 1_000_000)
+    assert record["latency_ms"] >= 0.0
+
+    serialized_record = json.dumps(record, sort_keys=True)
+    assert "secret-key" not in serialized_record
+    assert "Authorization" not in serialized_record
 
 
 def test_openai_compatible_policy_can_use_legacy_max_tokens_parameter() -> None:

@@ -31,6 +31,27 @@ REQUIRED_METRICS = {
 }
 
 
+def llm_decision_record() -> dict[str, object]:
+    return {
+        "agent_id": 0,
+        "round_index": 1,
+        "provider": "mock",
+        "model": "mock-current",
+        "policy_type": "mock_llm",
+        "prompt": "agent_id=0",
+        "raw_response": {"content": '{"action":"A","belief_probability":0.75}'},
+        "parsed_action": "A",
+        "parsed_belief_probability": 0.75,
+        "confidence": 0.5,
+        "prompt_tokens": 9,
+        "completion_tokens": 7,
+        "input_cost_usd": 0.000009,
+        "output_cost_usd": 0.000014,
+        "total_cost_usd": 0.000023,
+        "latency_ms": 1.25,
+    }
+
+
 def make_config(tmp_path: Path) -> NetworkHerdingConfig:
     return NetworkHerdingConfig.from_dict(
         {
@@ -86,6 +107,7 @@ def test_network_replay_writer_writes_all_artifacts(tmp_path: Path) -> None:
     assert (output_dir / "timeseries.jsonl").exists()
     assert (output_dir / "metrics.json").exists()
     assert (output_dir / "summary.txt").exists()
+    assert not (output_dir / "llm_decisions.jsonl").exists()
 
     graph_payload = json.loads((output_dir / "graph.json").read_text(encoding="utf-8"))
     assert graph_payload["adjacency"] == {"0": [1], "1": [0]}
@@ -102,6 +124,65 @@ def test_network_replay_writer_writes_all_artifacts(tmp_path: Path) -> None:
 
     timeseries_lines = (output_dir / "timeseries.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(timeseries_lines) == 2
+
+
+def test_network_replay_writer_writes_llm_decision_artifact(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    graph = Graph({0: (1,), 1: (0,)}, topology={"type": "complete"})
+    rounds = (
+        (state(0, "A", 1.0, 0), state(1, "B", 0.0, 0)),
+        (state(0, "B", 0.0, 1), state(1, "A", 1.0, 1)),
+    )
+    timeseries = [
+        REQUIRED_TIMESERIES_ROW,
+        {**REQUIRED_TIMESERIES_ROW, "round_index": 1, "action_changes": 2},
+    ]
+
+    output_dir = NetworkReplayWriter(config).write(
+        graph=graph,
+        rounds=rounds,
+        timeseries=timeseries,
+        metrics=REQUIRED_METRICS,
+        llm_decisions=(llm_decision_record(),),
+    )
+
+    lines = (output_dir / "llm_decisions.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    row = json.loads(lines[0])
+    assert row["agent_id"] == 0
+    assert row["provider"] == "mock"
+    assert row["parsed_action"] == "A"
+    assert row["raw_response"] == {"content": '{"action":"A","belief_probability":0.75}'}
+
+
+def test_network_replay_writer_rejects_missing_llm_decision_key(tmp_path: Path) -> None:
+    config = make_config(tmp_path)
+    graph = Graph({0: (1,), 1: (0,)}, topology={"type": "complete"})
+    rounds = (
+        (state(0, "A", 1.0, 0), state(1, "B", 0.0, 0)),
+        (state(0, "B", 0.0, 1), state(1, "A", 1.0, 1)),
+    )
+    timeseries = [
+        REQUIRED_TIMESERIES_ROW,
+        {**REQUIRED_TIMESERIES_ROW, "round_index": 1, "action_changes": 2},
+    ]
+    incomplete_record = {
+        key: value for key, value in llm_decision_record().items() if key != "prompt"
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="llm_decisions row 0 is missing required key: prompt",
+    ):
+        NetworkReplayWriter(config).write(
+            graph=graph,
+            rounds=rounds,
+            timeseries=timeseries,
+            metrics=REQUIRED_METRICS,
+            llm_decisions=(incomplete_record,),
+        )
+
+    assert not (tmp_path / "network-run").exists()
 
 
 @pytest.mark.parametrize(
