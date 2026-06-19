@@ -1,3 +1,5 @@
+import pytest
+
 from society_simulation.event_models import EventAgentProfile, EventMessage, OpinionEvent
 from society_simulation.event_scheduling import build_day_exposures
 
@@ -55,6 +57,105 @@ def test_build_day_exposures_delivers_events_by_media_habit() -> None:
     assert exposures[0].source_id == "news"
 
 
+@pytest.mark.parametrize(
+    ("audience_filter", "message"),
+    [
+        ({"media_habits_any": "local_news"}, "media_habits_any must be a list of strings"),
+        ({"agent_ids": "a"}, "agent_ids must be a list of strings"),
+    ],
+)
+def test_build_day_exposures_rejects_malformed_recognized_audience_filters(
+    audience_filter: dict[str, object],
+    message: str,
+) -> None:
+    agents = (agent("a", ["local_news"]),)
+    event = OpinionEvent.from_dict(
+        {
+            "event_id": "bad-filter",
+            "day": 1,
+            "title": "Bad filter",
+            "source": "Local News",
+            "source_type": "news",
+            "content": "This event has malformed targeting.",
+            "policy_stance": 0.2,
+            "credibility": 0.7,
+            "emotional_intensity": 0.3,
+            "affected_interests": ["commute time"],
+            "audience_filter": audience_filter,
+        }
+    )
+
+    with pytest.raises(ValueError, match=message):
+        build_day_exposures(
+            day=1,
+            agents=agents,
+            events=(event,),
+            previous_messages=(),
+            channel_members={},
+        )
+
+
+def test_build_day_exposures_combines_audience_filters_with_or_semantics() -> None:
+    agents = (
+        agent("a", ["podcast"]),
+        agent("b", ["local_news"]),
+        agent("c", ["podcast"]),
+    )
+    event = OpinionEvent.from_dict(
+        {
+            "event_id": "combined",
+            "day": 1,
+            "title": "Combined targeting",
+            "source": "Local News",
+            "source_type": "news",
+            "content": "This event targets local news readers and one named agent.",
+            "policy_stance": 0.2,
+            "credibility": 0.7,
+            "emotional_intensity": 0.3,
+            "affected_interests": ["commute time"],
+            "audience_filter": {"media_habits_any": ["local_news"], "agent_ids": ["a"]},
+        }
+    )
+
+    exposures = build_day_exposures(
+        day=1,
+        agents=agents,
+        events=(event,),
+        previous_messages=(),
+        channel_members={},
+    )
+
+    assert [exposure.agent_id for exposure in exposures] == ["a", "b"]
+
+
+def test_build_day_exposures_delivers_events_without_filter_to_all_agents() -> None:
+    agents = (agent("a", ["local_news"]), agent("b", ["podcast"]))
+    event = OpinionEvent.from_dict(
+        {
+            "event_id": "public",
+            "day": 1,
+            "title": "Public update",
+            "source": "City Hall",
+            "source_type": "official",
+            "content": "The city posted a public proposal update.",
+            "policy_stance": 0.2,
+            "credibility": 0.7,
+            "emotional_intensity": 0.3,
+            "affected_interests": ["commute time"],
+        }
+    )
+
+    exposures = build_day_exposures(
+        day=1,
+        agents=agents,
+        events=(event,),
+        previous_messages=(),
+        channel_members={},
+    )
+
+    assert [exposure.agent_id for exposure in exposures] == ["a", "b"]
+
+
 def test_build_day_exposures_delivers_previous_group_chat_messages_to_channel_members_except_sender() -> None:
     agents = (agent("a", ["local_news"]), agent("b", ["local_news"]))
     message = EventMessage(
@@ -76,6 +177,27 @@ def test_build_day_exposures_delivers_previous_group_chat_messages_to_channel_me
     assert len(exposures) == 1
     assert exposures[0].agent_id == "b"
     assert exposures[0].source_type == "message"
+
+
+def test_build_day_exposures_ignores_unknown_group_chat_members() -> None:
+    agents = (agent("a", ["local_news"]), agent("b", ["local_news"]))
+    message = EventMessage(
+        day=1,
+        sender_agent_id="a",
+        channel="neighborhood",
+        recipient_agent_id=None,
+        text="I worry this fee hurts workers.",
+    )
+
+    exposures = build_day_exposures(
+        day=2,
+        agents=agents,
+        events=(),
+        previous_messages=(message,),
+        channel_members={"neighborhood": {"a", "b", "unknown"}},
+    )
+
+    assert [exposure.agent_id for exposure in exposures] == ["b"]
 
 
 def test_build_day_exposures_delivers_private_dm_only_to_recipient() -> None:

@@ -54,6 +54,8 @@ def build_day_exposures(
         for agent_id in sorted(channel_members.get(message.channel, set())):
             if agent_id == message.sender_agent_id:
                 continue
+            if agent_id not in agent_by_id:
+                continue
             exposures.append(
                 EventExposure(
                     day=day,
@@ -68,10 +70,25 @@ def build_day_exposures(
 
 
 def _event_visible_to_agent(event: OpinionEvent, agent: EventAgentProfile) -> bool:
-    media_any = event.audience_filter.get("media_habits_any")
-    if isinstance(media_any, (list, tuple)):
-        return any(item in agent.media_habits for item in media_any if isinstance(item, str))
-    agent_ids = event.audience_filter.get("agent_ids")
-    if isinstance(agent_ids, (list, tuple)):
-        return agent.agent_id in {item for item in agent_ids if isinstance(item, str)}
+    filters: list[bool] = []
+
+    if "media_habits_any" in event.audience_filter:
+        media_any = _require_str_sequence(
+            event.audience_filter["media_habits_any"],
+            "media_habits_any",
+        )
+        filters.append(any(item in agent.media_habits for item in media_any))
+
+    if "agent_ids" in event.audience_filter:
+        agent_ids = _require_str_sequence(event.audience_filter["agent_ids"], "agent_ids")
+        filters.append(agent.agent_id in set(agent_ids))
+
+    if filters:
+        return any(filters)
     return True
+
+
+def _require_str_sequence(value: object, field_name: str) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)) or not all(isinstance(item, str) for item in value):
+        raise ValueError(f"{field_name} must be a list of strings")
+    return tuple(value)
