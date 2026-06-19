@@ -6,6 +6,8 @@ from math import isfinite
 from pathlib import Path
 from typing import Literal
 
+from society_simulation.event_config import EventDrivenOpinionConfig
+
 Action = Literal["A", "B"]
 
 
@@ -667,7 +669,7 @@ class NetworkHerdingConfig:
         }
 
 
-Config = ExperimentConfig | NetworkHerdingConfig
+Config = ExperimentConfig | NetworkHerdingConfig | EventDrivenOpinionConfig
 
 
 def load_config(path: str | Path) -> Config:
@@ -677,6 +679,8 @@ def load_config(path: str | Path) -> Config:
         raise ValueError("config root must be an object")
     if data.get("experiment_name") == "network_herding":
         config = NetworkHerdingConfig.from_dict(data)
+    elif data.get("experiment_name") == "event_driven_opinion_dynamics":
+        config = EventDrivenOpinionConfig.from_dict(data)
     else:
         config = ExperimentConfig(**data)
     config.validate()
