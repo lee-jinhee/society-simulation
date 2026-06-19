@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field as dataclass_field
 from math import isfinite
+from types import MappingProxyType
 
 
 def validate_probability(value: object, field: str) -> float:
@@ -71,16 +73,17 @@ def _require_str_tuple(value: object, field_name: str) -> tuple[str, ...]:
     )
 
 
-def _copy_audience_filter_value(value: object) -> object:
+def _freeze_audience_filter_value(value: object) -> object:
     if isinstance(value, dict):
-        return {key: _copy_audience_filter_value(item) for key, item in value.items()}
+        copied = {key: _freeze_audience_filter_value(item) for key, item in value.items()}
+        return MappingProxyType(copied)
     if isinstance(value, (list, tuple)):
-        return tuple(_copy_audience_filter_value(item) for item in value)
+        return tuple(_freeze_audience_filter_value(item) for item in value)
     return value
 
 
 def _to_json_ready(value: object) -> object:
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         return {key: _to_json_ready(item) for key, item in value.items()}
     if isinstance(value, tuple):
         return [_to_json_ready(item) for item in value]
@@ -369,7 +372,7 @@ class OpinionEvent:
     credibility: float
     emotional_intensity: float
     affected_interests: tuple[str, ...]
-    audience_filter: dict[str, object] = dataclass_field(default_factory=dict)
+    audience_filter: Mapping[str, object] = dataclass_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> OpinionEvent:
@@ -434,7 +437,7 @@ class OpinionEvent:
         object.__setattr__(
             self,
             "audience_filter",
-            _copy_audience_filter_value(self.audience_filter),
+            _freeze_audience_filter_value(self.audience_filter),
         )
 
     def to_dict(self) -> dict[str, object]:

@@ -225,6 +225,40 @@ def test_event_defensively_copies_audience_filter() -> None:
     }
 
 
+def test_event_audience_filter_rejects_direct_mutation() -> None:
+    event_kwargs = _valid_event_kwargs()
+    event_kwargs["audience_filter"] = {"media_habits_any": ["local_news"]}
+    event = OpinionEvent(**event_kwargs)  # type: ignore[arg-type]
+
+    with pytest.raises(TypeError):
+        event.audience_filter["new"] = "value"
+
+
+def test_event_audience_filter_rejects_nested_mapping_mutation() -> None:
+    event_kwargs = _valid_event_kwargs()
+    event_kwargs["audience_filter"] = {"nested": {"channels": ["group_chat"]}}
+    event = OpinionEvent(**event_kwargs)  # type: ignore[arg-type]
+
+    nested_filter = event.audience_filter["nested"]
+
+    with pytest.raises(TypeError):
+        nested_filter["channels"] = ["newspaper"]  # type: ignore[index]
+
+
+def test_event_to_dict_returns_plain_audience_filter_containers() -> None:
+    event_kwargs = _valid_event_kwargs()
+    event_kwargs["audience_filter"] = {"nested": {"channels": ["group_chat"]}}
+    event = OpinionEvent(**event_kwargs)  # type: ignore[arg-type]
+
+    serialized = event.to_dict()
+    audience_filter = serialized["audience_filter"]
+
+    assert isinstance(audience_filter, dict)
+    assert isinstance(audience_filter["nested"], dict)  # type: ignore[index]
+    assert isinstance(audience_filter["nested"]["channels"], list)  # type: ignore[index]
+    assert audience_filter == {"nested": {"channels": ["group_chat"]}}
+
+
 def test_exposure_message_and_state_to_dict_are_json_ready() -> None:
     exposure = EventExposure(
         day=2,
