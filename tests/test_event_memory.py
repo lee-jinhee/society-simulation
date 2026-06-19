@@ -139,6 +139,34 @@ def test_retrieve_memories_filters_to_agent_and_excludes_future_memories() -> No
     assert retrieve_memories((other_agent, future), query, limit=5) == ()
 
 
+def test_retrieved_memory_validates_score_components() -> None:
+    retrieved = retrieve_memories(
+        (memory("traffic", day=1, text="traffic"),),
+        MemoryQuery(
+            agent_id="jisoo",
+            day=1,
+            text="traffic",
+            related_agent_ids=(),
+            related_event_ids=(),
+            stance_hint=0.0,
+            affected_interests=(),
+        ),
+        limit=1,
+    )[0]
+
+    with pytest.raises(ValueError, match="score must be a number between 0 and 1"):
+        type(retrieved)(
+            memory=retrieved.memory,
+            score=1.2,
+            recency_score=retrieved.recency_score,
+            relevance_score=retrieved.relevance_score,
+            importance_score=retrieved.importance_score,
+            trust_score=retrieved.trust_score,
+            emotion_score=retrieved.emotion_score,
+            identity_score=retrieved.identity_score,
+        )
+
+
 def test_build_memory_query_combines_exposure_text_and_metadata() -> None:
     exposure = EventExposure(
         day=2,

@@ -159,6 +159,22 @@ class RetrievedMemory:
     emotion_score: float
     identity_score: float
 
+    def __post_init__(self) -> None:
+        for field_name in (
+            "score",
+            "recency_score",
+            "relevance_score",
+            "importance_score",
+            "trust_score",
+            "emotion_score",
+            "identity_score",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                validate_probability(getattr(self, field_name), field_name),
+            )
+
     def to_dict(self) -> dict[str, object]:
         return {
             "memory": self.memory.to_dict(),

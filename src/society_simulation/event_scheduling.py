@@ -46,7 +46,7 @@ def build_day_exposures(
                         agent_id=message.recipient_agent_id,
                         source_type="message",
                         source_id=f"{message.sender_agent_id}:{message.day}:{message.channel}",
-                        channel=message.channel,
+                        channel=f"private_dm:{message.channel}",
                         content=f"{message.sender_agent_id}: {message.text}",
                     )
                 )

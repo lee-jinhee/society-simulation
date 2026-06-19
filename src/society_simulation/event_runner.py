@@ -345,6 +345,9 @@ def _memory_from_exposure(
         if event is not None
         else relationship_trust.get((sender_agent_id or "", exposure.agent_id), 0.5)
     )
+    is_private_message = exposure.source_type == "message" and exposure.channel.startswith(
+        "private_dm:"
+    )
     return SocialMemory(
         memory_id=f"{exposure.agent_id}:{exposure.day}:exposure:{sequence}",
         agent_id=exposure.agent_id,
@@ -361,7 +364,7 @@ def _memory_from_exposure(
         source_trust=source_trust,
         identity_relevance=identity_relevance,
         importance=max(0.3, min(1.0, (identity_relevance + emotional_intensity + source_trust) / 3)),
-        private=False,
+        private=is_private_message,
     )
 
 

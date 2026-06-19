@@ -223,6 +223,7 @@ def test_build_day_exposures_delivers_private_dm_only_to_recipient() -> None:
     )
 
     assert [exposure.agent_id for exposure in exposures] == ["c"]
+    assert exposures[0].channel == "private_dm:private_dm"
 
 
 def test_build_day_exposures_delivers_events_by_agent_id_filter() -> None:
