@@ -135,8 +135,14 @@ class MockPersonaPolicy:
         exposures: Sequence[EventExposure],
         *,
         day: int,
+        retrieved_memories: Sequence[object] = (),
     ) -> EventPolicyDecision:
-        prompt = _event_prompt(profile, current_state, exposures)
+        prompt = _event_prompt(
+            profile,
+            current_state,
+            exposures,
+            retrieved_memories=retrieved_memories,
+        )
         response_content = self._response_content(profile, current_state, exposures)
         decision = parse_event_decision_content(
             response_content,
@@ -285,6 +291,7 @@ class OpenAICompatiblePersonaPolicy:
         exposures: Sequence[EventExposure],
         *,
         day: int,
+        retrieved_memories: Sequence[object] = (),
     ) -> EventPolicyDecision:
         messages = [
             {"role": "system", "content": _ROLE_MESSAGE},
@@ -296,6 +303,7 @@ class OpenAICompatiblePersonaPolicy:
                     exposures,
                     configured_channels=self.configured_channels,
                     known_agent_ids=self.known_agent_ids,
+                    retrieved_memories=retrieved_memories,
                 ),
             },
         ]
@@ -420,11 +428,21 @@ def _event_prompt(
     profile: EventAgentProfile,
     current_state: EventAgentState,
     exposures: Sequence[EventExposure],
+    *,
+    retrieved_memories: Sequence[object] = (),
 ) -> str:
     return _messages_text(
         [
             {"role": "system", "content": _ROLE_MESSAGE},
-            {"role": "user", "content": _event_user_message(profile, current_state, exposures)},
+            {
+                "role": "user",
+                "content": _event_user_message(
+                    profile,
+                    current_state,
+                    exposures,
+                    retrieved_memories=retrieved_memories,
+                ),
+            },
         ]
     )
 
@@ -436,12 +454,14 @@ def _event_user_message(
     *,
     configured_channels: Sequence[str] = (),
     known_agent_ids: Sequence[str] = (),
+    retrieved_memories: Sequence[object] = (),
 ) -> str:
     exposure_rows = [exposure.to_dict() for exposure in exposures]
     allowed_channels = _allowed_message_channels(profile, configured_channels)
     allowed_recipients = tuple(
         agent_id for agent_id in known_agent_ids if agent_id != profile.agent_id
     )
+    memory_context = _memory_context(retrieved_memories)
     return (
         "Consider the new information and decide how your views and messages change.\n"
         "Return only JSON with keys private_stance, public_stance, confidence, salience, "
@@ -454,10 +474,28 @@ def _event_user_message(
         "Use null for group/channel posts. Do not use event ids or source ids as recipients.\n"
         f"allowed_channels={json.dumps(allowed_channels, sort_keys=True)}\n"
         f"allowed_recipients={json.dumps(allowed_recipients, sort_keys=True)}\n"
+        f"{memory_context}"
         f"profile={json.dumps(profile.to_dict(), sort_keys=True)}\n"
         f"current_state={json.dumps(current_state.to_dict(), sort_keys=True)}\n"
         f"exposures={json.dumps(exposure_rows, sort_keys=True)}"
     )
+
+
+def _memory_context(retrieved_memories: Sequence[object]) -> str:
+    lines = _memory_context_lines(retrieved_memories)
+    if not lines:
+        return ""
+    return "Things you currently remember:\n" + "\n".join(f"- {line}" for line in lines) + "\n"
+
+
+def _memory_context_lines(retrieved_memories: Sequence[object]) -> tuple[str, ...]:
+    lines: list[str] = []
+    for item in retrieved_memories:
+        memory = getattr(item, "memory", item)
+        text = getattr(memory, "text", None)
+        if isinstance(text, str) and text.strip():
+            lines.append(text.strip())
+    return tuple(lines)
 
 
 def _event_audit_record(
