@@ -259,6 +259,7 @@ class OpenAICompatiblePersonaPolicy:
         )
         self.usage = LLMUsage()
         self._audit_records: list[dict[str, Any]] = []
+        self._sensitive_audit_values = tuple(value for value in (api_key,) if value)
         self._client = OpenAICompatibleClient(
             base_url=base_url,
             api_key=api_key,
@@ -323,6 +324,7 @@ class OpenAICompatiblePersonaPolicy:
                 pricing=self.pricing,
                 latency_ms=latency_ms,
                 messages=messages,
+                sensitive_values=self._sensitive_audit_values,
             )
         )
         return decision
@@ -403,6 +405,7 @@ def _event_audit_record(
     pricing: LLMPricing,
     latency_ms: float,
     messages: list[dict[str, str]] | None = None,
+    sensitive_values: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     input_cost_usd = pricing.input_cost(prompt_tokens)
     output_cost_usd = pricing.output_cost(completion_tokens)
@@ -414,7 +417,7 @@ def _event_audit_record(
         "model": model,
         "policy_type": policy_type,
         "prompt": prompt,
-        "raw_response": _sanitize_audit_value(raw_response),
+        "raw_response": _sanitize_audit_value(raw_response, sensitive_values=sensitive_values),
         "parsed_private_stance": state.private_stance,
         "parsed_public_stance": state.public_stance,
         "parsed_confidence": state.confidence,
@@ -435,12 +438,19 @@ def _event_audit_record(
     return record
 
 
-def _sanitize_audit_value(value: object) -> object:
+def _sanitize_audit_value(
+    value: object,
+    *,
+    sensitive_values: tuple[str, ...] = (),
+) -> object:
     if isinstance(value, dict):
         sanitized: dict[object, object] = {}
         for key, item in value.items():
             if not isinstance(key, str):
-                sanitized[key] = _sanitize_audit_value(item)
+                sanitized[key] = _sanitize_audit_value(
+                    item,
+                    sensitive_values=sensitive_values,
+                )
                 continue
             normalized_key = key.lower()
             if normalized_key in _SENSITIVE_RESPONSE_KEYS:
@@ -448,14 +458,26 @@ def _sanitize_audit_value(value: object) -> object:
             if "headers" in normalized_key:
                 sanitized[key] = _REDACTED
             else:
-                sanitized[key] = _sanitize_audit_value(item)
+                sanitized[key] = _sanitize_audit_value(
+                    item,
+                    sensitive_values=sensitive_values,
+                )
         return sanitized
     if isinstance(value, list):
-        return [_sanitize_audit_value(item) for item in value]
+        return [
+            _sanitize_audit_value(item, sensitive_values=sensitive_values)
+            for item in value
+        ]
     if isinstance(value, tuple):
-        return tuple(_sanitize_audit_value(item) for item in value)
-    if isinstance(value, str) and "Bearer " in value:
-        return _REDACTED
+        return tuple(
+            _sanitize_audit_value(item, sensitive_values=sensitive_values)
+            for item in value
+        )
+    if isinstance(value, str):
+        if "Bearer " in value:
+            return _REDACTED
+        if any(secret and secret in value for secret in sensitive_values):
+            return _REDACTED
     return copy.deepcopy(value)
 
 
