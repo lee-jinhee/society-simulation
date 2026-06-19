@@ -425,7 +425,7 @@ def _event_audit_record(
         "model": model,
         "policy_type": policy_type,
         "prompt": prompt,
-        "raw_response": _sanitize_audit_value(raw_response, sensitive_values=sensitive_values),
+        "raw_response": copy.deepcopy(raw_response),
         "parsed_private_stance": state.private_stance,
         "parsed_public_stance": state.public_stance,
         "parsed_confidence": state.confidence,
@@ -443,7 +443,10 @@ def _event_audit_record(
     }
     if messages is not None:
         record["messages"] = copy.deepcopy(messages)
-    return record
+    sanitized_record = _sanitize_audit_value(record, sensitive_values=sensitive_values)
+    if not isinstance(sanitized_record, dict):
+        raise TypeError("sanitized audit record must be a dictionary")
+    return sanitized_record
 
 
 def _sanitize_audit_value(

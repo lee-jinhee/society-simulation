@@ -379,3 +379,91 @@ def test_openai_compatible_persona_policy_redacts_api_key_echo_values_from_audit
     policy.decide(profile(), state(), (exposure(),), day=1)
 
     assert "secret-key" not in json.dumps(policy.audit_records(), sort_keys=True)
+
+
+def test_openai_compatible_persona_policy_redacts_parsed_output_secrets_from_audit() -> None:
+    def transport(
+        url: str,
+        headers: dict[str, str],
+        payload: dict[str, object],
+        timeout_seconds: float,
+    ) -> dict[str, object]:
+        del url, headers, payload, timeout_seconds
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "private_stance": 0.1,
+                                "public_stance": 0.0,
+                                "confidence": 0.5,
+                                "salience": 0.6,
+                                "emotion": "conflicted",
+                                "private_reasoning": (
+                                    "Authorization: Bearer secret-key shaped my view."
+                                ),
+                                "messages": [
+                                    {
+                                        "channel": "neighborhood_group_chat",
+                                        "recipient": None,
+                                        "text": "api_key secret-key should not be stored.",
+                                    }
+                                ],
+                                "memory_update": "Remembered api_key secret-key from the note.",
+                            }
+                        )
+                    }
+                }
+            ],
+        }
+
+    policy = OpenAICompatiblePersonaPolicy(
+        model="cheap-chat",
+        api_key="secret-key",
+        base_url="https://example.test/v1",
+        transport=transport,
+    )
+
+    policy.decide(profile(), state(), (exposure(),), day=1)
+
+    audit_json = json.dumps(policy.audit_records(), sort_keys=True)
+    assert "secret-key" not in audit_json
+    assert "Authorization" not in audit_json
+    assert "Bearer" not in audit_json
+    assert "api_key" not in audit_json
+
+
+def test_openai_compatible_persona_policy_redacts_prompt_secrets_from_audit() -> None:
+    secret_exposure = EventExposure(
+        day=1,
+        agent_id="jisoo",
+        source_type="event",
+        source_id="debug_echo",
+        channel="news_feed",
+        content="Authorization: Bearer secret-key and api_key should not persist.",
+    )
+
+    def transport(
+        url: str,
+        headers: dict[str, str],
+        payload: dict[str, object],
+        timeout_seconds: float,
+    ) -> dict[str, object]:
+        del url, headers, payload, timeout_seconds
+        return {"choices": [{"message": {"content": llm_decision_content()}}]}
+
+    policy = OpenAICompatiblePersonaPolicy(
+        model="cheap-chat",
+        api_key="secret-key",
+        base_url="https://example.test/v1",
+        transport=transport,
+    )
+
+    policy.decide(profile(), state(), (secret_exposure,), day=1)
+
+    audit_json = json.dumps(policy.audit_records(), sort_keys=True)
+    assert "secret-key" not in audit_json
+    assert "Authorization" not in audit_json
+    assert "Bearer" not in audit_json
+    assert "api_key" not in audit_json
