@@ -12,10 +12,16 @@ def compute_event_timeseries(
     messages: tuple[EventMessage, ...],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
+    previous_day: int | None = None
     for states in states_by_day:
         if not states:
             raise ValueError("states_by_day must not contain empty days")
         day = states[0].day
+        if any(state.day != day for state in states[1:]):
+            raise ValueError("states within a day bucket must share the same day")
+        if previous_day is not None and day <= previous_day:
+            raise ValueError("states_by_day must be ordered by day")
+        previous_day = day
         private_values = [state.private_stance for state in states]
         public_values = [state.public_stance for state in states]
         gaps = [abs(state.private_stance - state.public_stance) for state in states]
