@@ -105,6 +105,31 @@ def test_event_runner_requires_configured_llm_api_key_env(
         run_experiment(EventDrivenOpinionConfig.from_dict(data))
 
 
+def test_event_runner_passes_configured_social_context_to_llm_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class CapturingPolicy:
+        def __init__(self, **kwargs):  # type: ignore[no-untyped-def]
+            captured.update(kwargs)
+
+    data = valid_event_config(tmp_path)
+    data["update_policy"] = {
+        "type": "llm",
+        "model": "cheap-chat",
+        "api_key_env": "EVENT_TEST_KEY",
+    }
+    monkeypatch.setenv("EVENT_TEST_KEY", "secret-key")
+    monkeypatch.setattr(event_runner, "OpenAICompatiblePersonaPolicy", CapturingPolicy)
+
+    event_runner._build_event_policy(EventDrivenOpinionConfig.from_dict(data))
+
+    assert captured["configured_channels"] == ("neighborhood_group_chat",)
+    assert captured["known_agent_ids"] == ("jisoo", "minho")
+
+
 def _copy_state(
     current_state: EventAgentState,
     *,

@@ -195,6 +195,48 @@ def test_openai_compatible_persona_policy_sends_human_role_prompt_without_experi
     assert "secret-key" not in json.dumps(policy.audit_records(), sort_keys=True)
 
 
+def test_openai_compatible_persona_policy_includes_message_constraints() -> None:
+    captured: dict[str, object] = {}
+
+    def transport(
+        url: str,
+        headers: dict[str, str],
+        payload: dict[str, object],
+        timeout_seconds: float,
+    ) -> dict[str, object]:
+        del url, headers, timeout_seconds
+        captured["payload"] = payload
+        return {
+            "choices": [{"message": {"content": llm_decision_content()}}],
+            "usage": {"prompt_tokens": 100, "completion_tokens": 40},
+        }
+
+    policy = OpenAICompatiblePersonaPolicy(
+        model="cheap-chat",
+        api_key="secret-key",
+        base_url="https://example.test/v1",
+        configured_channels=("neighborhood_group_chat", "hospital_group_chat"),
+        known_agent_ids=("jisoo", "minho"),
+        transport=transport,
+    )
+
+    policy.decide(profile(), state(), (exposure(),), day=1)
+
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    prompt_text = json.dumps(payload["messages"])
+    assert "allowed_channels" in prompt_text
+    assert "neighborhood_group_chat" in prompt_text
+    assert "hospital_group_chat" not in prompt_text
+    assert "allowed_recipients" in prompt_text
+    assert "minho" in prompt_text
+    assert "recipient must be null or one of allowed_recipients" in prompt_text
+    assert "Do not use event ids or source ids as recipients" in prompt_text
+    assert "At most one message" in prompt_text
+    assert "private_reasoning under 280 characters" in prompt_text
+    assert "message text under 180 characters" in prompt_text
+
+
 def test_openai_compatible_persona_policy_redacts_secret_keys_and_auth_patterns() -> None:
     def transport(
         url: str,

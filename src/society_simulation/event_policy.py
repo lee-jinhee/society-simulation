@@ -231,6 +231,8 @@ class OpenAICompatiblePersonaPolicy:
         input_cost_per_1m_tokens: float = 0.0,
         output_cost_per_1m_tokens: float = 0.0,
         max_estimated_cost_usd: float | None = None,
+        configured_channels: Sequence[str] = (),
+        known_agent_ids: Sequence[str] = (),
         transport: JSONTransport = _urllib_json_transport,
     ) -> None:
         if provider != "openai_compatible":
@@ -252,6 +254,8 @@ class OpenAICompatiblePersonaPolicy:
             "max_completion_tokens",
         )
         self.token_limit_parameter = token_limit_parameter
+        self.configured_channels = _string_tuple(configured_channels, "configured_channels")
+        self.known_agent_ids = _string_tuple(known_agent_ids, "known_agent_ids")
         self.pricing = LLMPricing(
             input_cost_per_1m_tokens=input_cost_per_1m_tokens,
             output_cost_per_1m_tokens=output_cost_per_1m_tokens,
@@ -284,7 +288,16 @@ class OpenAICompatiblePersonaPolicy:
     ) -> EventPolicyDecision:
         messages = [
             {"role": "system", "content": _ROLE_MESSAGE},
-            {"role": "user", "content": _event_user_message(profile, current_state, exposures)},
+            {
+                "role": "user",
+                "content": _event_user_message(
+                    profile,
+                    current_state,
+                    exposures,
+                    configured_channels=self.configured_channels,
+                    known_agent_ids=self.known_agent_ids,
+                ),
+            },
         ]
         prompt = _messages_text(messages)
         prompt_tokens_estimate = estimate_tokens(prompt)
@@ -420,13 +433,27 @@ def _event_user_message(
     profile: EventAgentProfile,
     current_state: EventAgentState,
     exposures: Sequence[EventExposure],
+    *,
+    configured_channels: Sequence[str] = (),
+    known_agent_ids: Sequence[str] = (),
 ) -> str:
     exposure_rows = [exposure.to_dict() for exposure in exposures]
+    allowed_channels = _allowed_message_channels(profile, configured_channels)
+    allowed_recipients = tuple(
+        agent_id for agent_id in known_agent_ids if agent_id != profile.agent_id
+    )
     return (
         "Consider the new information and decide how your views and messages change.\n"
         "Return only JSON with keys private_stance, public_stance, confidence, salience, "
         "emotion, private_reasoning, messages, and memory_update.\n"
-        "messages must be a list of objects with channel, recipient, and text.\n"
+        "Keep private_reasoning under 280 characters and memory_update under 160 characters.\n"
+        "messages must be a list of objects with channel, recipient, and text. "
+        "At most one message. Keep message text under 180 characters.\n"
+        "For messages, channel must be one of allowed_channels; "
+        "recipient must be null or one of allowed_recipients. "
+        "Use null for group/channel posts. Do not use event ids or source ids as recipients.\n"
+        f"allowed_channels={json.dumps(allowed_channels, sort_keys=True)}\n"
+        f"allowed_recipients={json.dumps(allowed_recipients, sort_keys=True)}\n"
         f"profile={json.dumps(profile.to_dict(), sort_keys=True)}\n"
         f"current_state={json.dumps(current_state.to_dict(), sort_keys=True)}\n"
         f"exposures={json.dumps(exposure_rows, sort_keys=True)}"
@@ -617,6 +644,26 @@ def _mock_message_channel(
         if "chat" in channel:
             return channel
     return "neighborhood_group_chat"
+
+
+def _allowed_message_channels(
+    profile: EventAgentProfile,
+    configured_channels: Sequence[str],
+) -> tuple[str, ...]:
+    configured = tuple(configured_channels)
+    preferred = tuple(channel for channel in profile.media_habits if channel in configured)
+    if preferred:
+        return preferred
+    if configured:
+        return configured
+    return profile.media_habits
+
+
+def _string_tuple(values: Sequence[str], field_name: str) -> tuple[str, ...]:
+    return tuple(
+        _require_non_empty_str(value, f"{field_name}[{index}]")
+        for index, value in enumerate(values)
+    )
 
 
 def _messages_text(messages: list[dict[str, str]]) -> str:

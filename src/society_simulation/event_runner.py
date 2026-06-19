@@ -217,6 +217,8 @@ def _build_event_policy(config: EventDrivenOpinionConfig) -> object:
         timeout_seconds=policy.get("timeout_seconds", 30.0),  # type: ignore[arg-type]
         input_cost_per_1m_tokens=policy.get("input_cost_per_1m_tokens", 0.0),  # type: ignore[arg-type]
         output_cost_per_1m_tokens=policy.get("output_cost_per_1m_tokens", 0.0),  # type: ignore[arg-type]
+        configured_channels=_configured_channel_ids(config),
+        known_agent_ids=tuple(agent.agent_id for agent in config.agents),
         max_estimated_cost_usd=(
             None
             if "max_estimated_cost_usd" not in policy
