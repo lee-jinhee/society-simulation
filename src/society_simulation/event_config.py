@@ -1,12 +1,21 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from math import isfinite
+from types import MappingProxyType
 
 from society_simulation.event_models import EventAgentProfile, EventRelationship, OpinionEvent
 
 
 def _require_mapping(value: object, field: str) -> dict[str, object]:
     if not isinstance(value, dict):
+        raise ValueError(f"{field} must be an object")
+    return value
+
+
+def _require_free_form_mapping(value: object, field: str) -> Mapping[object, object]:
+    if not isinstance(value, Mapping):
         raise ValueError(f"{field} must be an object")
     return value
 
@@ -35,23 +44,61 @@ def _require_sequence(value: object, field: str) -> list[object] | tuple[object,
     return value
 
 
-def _copy_json_ready(value: object) -> object:
-    if isinstance(value, dict):
+def _unsupported_json_value_error() -> ValueError:
+    return ValueError("free-form config values must contain only JSON-compatible values")
+
+
+def _freeze_json_value(value: object) -> object:
+    if isinstance(value, Mapping):
         copied: dict[str, object] = {}
         for key, item in value.items():
             if not isinstance(key, str):
                 raise ValueError("object keys must be strings")
-            copied[key] = _copy_json_ready(item)
-        return copied
+            copied[key] = _freeze_json_value(item)
+        return MappingProxyType(copied)
     if isinstance(value, tuple):
-        return [_copy_json_ready(item) for item in value]
+        return tuple(_freeze_json_value(item) for item in value)
     if isinstance(value, list):
-        return [_copy_json_ready(item) for item in value]
-    return value
+        return tuple(_freeze_json_value(item) for item in value)
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, float):
+        if not isfinite(value):
+            raise _unsupported_json_value_error()
+        return value
+    raise _unsupported_json_value_error()
 
 
-def _copy_json_ready_mapping(value: dict[str, object]) -> dict[str, object]:
-    copied = _copy_json_ready(value)
+def _freeze_json_mapping(value: object, field: str) -> Mapping[str, object]:
+    frozen = _freeze_json_value(_require_free_form_mapping(value, field))
+    if not isinstance(frozen, Mapping):
+        raise ValueError(f"{field} must be an object")
+    return frozen
+
+
+def _to_json_ready(value: object) -> object:
+    if isinstance(value, Mapping):
+        data: dict[str, object] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ValueError("object keys must be strings")
+            data[key] = _to_json_ready(item)
+        return data
+    if isinstance(value, tuple):
+        return [_to_json_ready(item) for item in value]
+    if isinstance(value, list):
+        return [_to_json_ready(item) for item in value]
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, float):
+        if not isfinite(value):
+            raise _unsupported_json_value_error()
+        return value
+    raise _unsupported_json_value_error()
+
+
+def _to_json_ready_mapping(value: Mapping[str, object]) -> dict[str, object]:
+    copied = _to_json_ready(value)
     if not isinstance(copied, dict):
         raise ValueError("object must be an object")
     return copied
@@ -78,22 +125,26 @@ def _parse_events(value: object) -> tuple[OpinionEvent, ...]:
     )
 
 
-def _parse_channels(value: object) -> tuple[dict[str, object], ...]:
+def _parse_channels(value: object) -> tuple[Mapping[str, object], ...]:
     return tuple(
-        _copy_json_ready_mapping(_require_mapping(item, f"channels[{index}]"))
+        _freeze_json_mapping(_require_mapping(item, f"channels[{index}]"), f"channels[{index}]")
         for index, item in enumerate(_require_sequence(value, "channels"))
     )
 
 
-def _parse_update_policy(value: object) -> dict[str, object]:
-    policy = _copy_json_ready_mapping(_require_mapping(value, "update_policy"))
+def _parse_update_policy(value: object) -> Mapping[str, object]:
+    return _normalize_update_policy(_require_mapping(value, "update_policy"))
+
+
+def _normalize_update_policy(value: object) -> Mapping[str, object]:
+    policy = dict(_require_free_form_mapping(value, "update_policy"))
     policy_type = _require_non_empty_str(
         _require_field(policy, "type", "update_policy.type"),
         "update_policy.type",
     )
     if policy_type == "mock_persona" and "response_style" not in policy:
         policy["response_style"] = "balanced"
-    return policy
+    return _freeze_json_mapping(policy, "update_policy")
 
 
 @dataclass(frozen=True)
@@ -105,9 +156,17 @@ class EventDrivenOpinionConfig:
     agents: tuple[EventAgentProfile, ...]
     relationships: tuple[EventRelationship, ...]
     events: tuple[OpinionEvent, ...]
-    channels: tuple[dict[str, object], ...]
-    update_policy: dict[str, object]
+    channels: tuple[Mapping[str, object], ...]
+    update_policy: Mapping[str, object]
     output_dir: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "channels",
+            tuple(_freeze_json_mapping(channel, "channel") for channel in self.channels),
+        )
+        object.__setattr__(self, "update_policy", _normalize_update_policy(self.update_policy))
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> EventDrivenOpinionConfig:
@@ -175,6 +234,8 @@ class EventDrivenOpinionConfig:
             channel_id = channel.get("channel_id")
             if not isinstance(channel_id, str) or not channel_id.strip():
                 raise ValueError("channel_id must be a non-empty string")
+            if channel_id in channel_ids:
+                raise ValueError("channel ids must be unique")
             channel_ids.add(channel_id)
         return channel_ids
 
@@ -203,7 +264,7 @@ class EventDrivenOpinionConfig:
             "agents": [agent.to_dict() for agent in self.agents],
             "relationships": [relationship.to_dict() for relationship in self.relationships],
             "events": [event.to_dict() for event in self.events],
-            "channels": [_copy_json_ready_mapping(channel) for channel in self.channels],
-            "update_policy": _copy_json_ready_mapping(self.update_policy),
+            "channels": [_to_json_ready_mapping(channel) for channel in self.channels],
+            "update_policy": _to_json_ready_mapping(self.update_policy),
             "output_dir": self.output_dir,
         }

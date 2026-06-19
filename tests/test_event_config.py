@@ -105,6 +105,64 @@ def test_event_config_to_dict_round_trips(tmp_path: Path) -> None:
     assert round_tripped.to_dict() == payload
 
 
+def test_event_config_freezes_update_policy_after_construction(tmp_path: Path) -> None:
+    config = EventDrivenOpinionConfig.from_dict(valid_event_config(tmp_path))
+
+    with pytest.raises(TypeError):
+        config.update_policy["response_style"] = "silent"
+
+
+def test_event_config_freezes_channel_mappings_after_construction(tmp_path: Path) -> None:
+    config = EventDrivenOpinionConfig.from_dict(valid_event_config(tmp_path))
+
+    with pytest.raises(TypeError):
+        config.channels[0]["type"] = "direct_message"
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("channels", 0, "metadata"), {"local_news"}),
+        (("update_policy", "metadata"), float("nan")),
+        (("update_policy", "metadata"), object()),
+    ],
+)
+def test_event_config_rejects_unsupported_free_form_values(
+    tmp_path: Path,
+    path: tuple[object, ...],
+    value: object,
+) -> None:
+    data = valid_event_config(tmp_path)
+    target = data
+    for key in path[:-1]:
+        target = target[key]  # type: ignore[index,assignment]
+    target[path[-1]] = value  # type: ignore[index]
+
+    with pytest.raises(ValueError, match="must contain only JSON-compatible values"):
+        EventDrivenOpinionConfig.from_dict(data)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("channels", 0),
+        ("update_policy",),
+    ],
+)
+def test_event_config_rejects_non_string_free_form_dict_keys(
+    tmp_path: Path,
+    path: tuple[object, ...],
+) -> None:
+    data = valid_event_config(tmp_path)
+    target = data
+    for key in path:
+        target = target[key]  # type: ignore[index,assignment]
+    target[1] = "bad"  # type: ignore[index]
+
+    with pytest.raises(ValueError, match="object keys must be strings"):
+        EventDrivenOpinionConfig.from_dict(data)
+
+
 def test_event_config_rejects_duplicate_agent_ids(tmp_path: Path) -> None:
     data = valid_event_config(tmp_path)
     data["agents"] = [data["agents"][0], data["agents"][0]]
@@ -112,6 +170,19 @@ def test_event_config_rejects_duplicate_agent_ids(tmp_path: Path) -> None:
     config = EventDrivenOpinionConfig.from_dict(data)
 
     with pytest.raises(ValueError, match="agent ids must be unique"):
+        config.validate()
+
+
+def test_event_config_rejects_duplicate_channel_ids(tmp_path: Path) -> None:
+    data = valid_event_config(tmp_path)
+    data["channels"] = [
+        {"channel_id": "neighborhood_group_chat", "type": "group_chat"},
+        {"channel_id": "neighborhood_group_chat", "type": "group_chat"},
+    ]
+
+    config = EventDrivenOpinionConfig.from_dict(data)
+
+    with pytest.raises(ValueError, match="channel ids must be unique"):
         config.validate()
 
 
@@ -125,6 +196,26 @@ def test_event_config_rejects_relationship_to_missing_agent(tmp_path: Path) -> N
         config.validate()
 
 
+def test_event_config_rejects_relationship_to_missing_channel(tmp_path: Path) -> None:
+    data = valid_event_config(tmp_path)
+    data["relationships"][0]["channels"] = ["missing_channel"]  # type: ignore[index]
+
+    config = EventDrivenOpinionConfig.from_dict(data)
+
+    with pytest.raises(ValueError, match="relationship channel is not in channels"):
+        config.validate()
+
+
+def test_event_config_rejects_duplicate_event_ids(tmp_path: Path) -> None:
+    data = valid_event_config(tmp_path)
+    data["events"] = [data["events"][0], data["events"][0]]
+
+    config = EventDrivenOpinionConfig.from_dict(data)
+
+    with pytest.raises(ValueError, match="event ids must be unique"):
+        config.validate()
+
+
 def test_event_config_rejects_event_outside_day_range(tmp_path: Path) -> None:
     data = valid_event_config(tmp_path)
     data["events"][0]["day"] = 9  # type: ignore[index]
@@ -133,3 +224,43 @@ def test_event_config_rejects_event_outside_day_range(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="event day must be between 0 and days"):
         config.validate()
+
+
+@pytest.mark.parametrize(
+    ("update_policy", "message"),
+    [
+        ({"type": "unsupported"}, "unsupported event update_policy type"),
+        (
+            {"type": "mock_persona", "response_style": "aggressive"},
+            "unsupported mock_persona response_style",
+        ),
+    ],
+)
+def test_event_config_rejects_unsupported_update_policy(
+    tmp_path: Path,
+    update_policy: dict[str, object],
+    message: str,
+) -> None:
+    data = valid_event_config(tmp_path)
+    data["update_policy"] = update_policy
+
+    config = EventDrivenOpinionConfig.from_dict(data)
+
+    with pytest.raises(ValueError, match=message):
+        config.validate()
+
+
+def test_event_config_rejects_empty_llm_model(tmp_path: Path) -> None:
+    data = valid_event_config(tmp_path)
+    data["update_policy"] = {"type": "llm", "model": ""}
+
+    config = EventDrivenOpinionConfig.from_dict(data)
+
+    with pytest.raises(ValueError, match="llm.model must be a non-empty string"):
+        config.validate()
+
+
+def test_event_config_to_dict_is_json_serializable(tmp_path: Path) -> None:
+    config = EventDrivenOpinionConfig.from_dict(valid_event_config(tmp_path))
+
+    json.dumps(config.to_dict(), allow_nan=False)
