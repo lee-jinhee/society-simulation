@@ -176,3 +176,52 @@ def test_openai_compatible_persona_policy_sends_human_role_prompt_without_experi
     assert "Stay in character" in prompt_text
     assert "social network experiment" not in prompt_text
     assert "secret-key" not in json.dumps(policy.audit_records(), sort_keys=True)
+
+
+def test_openai_compatible_persona_policy_redacts_echoed_secrets_from_audit() -> None:
+    def transport(
+        url: str,
+        headers: dict[str, str],
+        payload: dict[str, object],
+        timeout_seconds: float,
+    ) -> dict[str, object]:
+        del url, payload, timeout_seconds
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "private_stance": 0.1,
+                                "public_stance": 0.0,
+                                "confidence": 0.5,
+                                "salience": 0.6,
+                                "emotion": "conflicted",
+                                "private_reasoning": "The announcement is plausible but costly.",
+                                "messages": [],
+                                "memory_update": "Jisoo remains conflicted.",
+                            }
+                        )
+                    }
+                }
+            ],
+            "request_headers": headers,
+            "metadata": {
+                "api_key": "secret-key",
+                "debug": "Authorization: Bearer secret-key",
+            },
+        }
+
+    policy = OpenAICompatiblePersonaPolicy(
+        model="cheap-chat",
+        api_key="secret-key",
+        base_url="https://example.test/v1",
+        transport=transport,
+    )
+
+    policy.decide(profile(), state(), (exposure(),), day=1)
+
+    audit_json = json.dumps(policy.audit_records(), sort_keys=True)
+    assert "secret-key" not in audit_json
+    assert "Authorization" not in audit_json
+    assert "Bearer" not in audit_json

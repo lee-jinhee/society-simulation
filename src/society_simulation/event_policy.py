@@ -41,6 +41,8 @@ _REQUIRED_DECISION_FIELDS = (
 )
 _POSITIVE_KEYWORDS = ("pollution", "traffic", "health", "asthma")
 _NEGATIVE_KEYWORDS = ("fee", "cost", "burden", "income", "livelihood")
+_SENSITIVE_RESPONSE_KEYS = {"authorization", "api_key", "headers"}
+_REDACTED = "[REDACTED]"
 
 
 @dataclass(frozen=True)
@@ -412,7 +414,7 @@ def _event_audit_record(
         "model": model,
         "policy_type": policy_type,
         "prompt": prompt,
-        "raw_response": copy.deepcopy(raw_response),
+        "raw_response": _sanitize_audit_value(raw_response),
         "parsed_private_stance": state.private_stance,
         "parsed_public_stance": state.public_stance,
         "parsed_confidence": state.confidence,
@@ -431,6 +433,30 @@ def _event_audit_record(
     if messages is not None:
         record["messages"] = copy.deepcopy(messages)
     return record
+
+
+def _sanitize_audit_value(value: object) -> object:
+    if isinstance(value, dict):
+        sanitized: dict[object, object] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                sanitized[key] = _sanitize_audit_value(item)
+                continue
+            normalized_key = key.lower()
+            if normalized_key in _SENSITIVE_RESPONSE_KEYS:
+                continue
+            if "headers" in normalized_key:
+                sanitized[key] = _REDACTED
+            else:
+                sanitized[key] = _sanitize_audit_value(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_audit_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_audit_value(item) for item in value)
+    if isinstance(value, str) and "Bearer " in value:
+        return _REDACTED
+    return copy.deepcopy(value)
 
 
 def _keyword_delta(exposures: Sequence[EventExposure]) -> float:
