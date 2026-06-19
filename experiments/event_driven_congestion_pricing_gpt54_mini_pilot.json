@@ -1,0 +1,514 @@
+{
+  "agents": [
+    {
+      "agent_id": "jisoo",
+      "age": 37,
+      "communication_style": "careful",
+      "core_values": [
+        "fairness",
+        "public health"
+      ],
+      "household_context": "single parent working hospital shifts",
+      "initial_confidence": 0.35,
+      "initial_private_stance": -0.1,
+      "initial_public_stance": 0.0,
+      "initial_salience": 0.45,
+      "material_interests": [
+        "commute time",
+        "hospital access"
+      ],
+      "media_habits": [
+        "local_news",
+        "neighborhood_group_chat"
+      ],
+      "name": "Jisoo Park",
+      "neighborhood": "east side",
+      "occupation": "hospital nurse",
+      "political_trust": 0.45,
+      "susceptibilities": [
+        "coworker stories",
+        "patient access concerns"
+      ]
+    },
+    {
+      "agent_id": "minho",
+      "age": 42,
+      "communication_style": "direct",
+      "core_values": [
+        "work",
+        "family budget"
+      ],
+      "household_context": "married with two children",
+      "initial_confidence": 0.55,
+      "initial_private_stance": -0.45,
+      "initial_public_stance": -0.25,
+      "initial_salience": 0.7,
+      "material_interests": [
+        "fuel cost",
+        "delivery time"
+      ],
+      "media_habits": [
+        "local_news",
+        "neighborhood_group_chat"
+      ],
+      "name": "Minho Lee",
+      "neighborhood": "west side",
+      "occupation": "taxi driver",
+      "political_trust": 0.25,
+      "susceptibilities": [
+        "driver livelihood stories",
+        "fare increase rumors"
+      ]
+    },
+    {
+      "agent_id": "amara",
+      "age": 29,
+      "communication_style": "analytical",
+      "core_values": [
+        "climate",
+        "evidence"
+      ],
+      "household_context": "rents near a transit hub",
+      "initial_confidence": 0.6,
+      "initial_private_stance": 0.45,
+      "initial_public_stance": 0.35,
+      "initial_salience": 0.65,
+      "material_interests": [
+        "air quality",
+        "bus reliability"
+      ],
+      "media_habits": [
+        "local_news",
+        "neighborhood_group_chat"
+      ],
+      "name": "Amara Johnson",
+      "neighborhood": "central district",
+      "occupation": "urban planning analyst",
+      "political_trust": 0.7,
+      "susceptibilities": [
+        "emissions data",
+        "transit funding details"
+      ]
+    },
+    {
+      "agent_id": "carlos",
+      "age": 51,
+      "communication_style": "pragmatic",
+      "core_values": [
+        "small business",
+        "predictability"
+      ],
+      "household_context": "supports an elderly parent",
+      "initial_confidence": 0.5,
+      "initial_private_stance": -0.25,
+      "initial_public_stance": -0.1,
+      "initial_salience": 0.55,
+      "material_interests": [
+        "customer traffic",
+        "supplier costs"
+      ],
+      "media_habits": [
+        "local_news",
+        "neighborhood_group_chat"
+      ],
+      "name": "Carlos Rivera",
+      "neighborhood": "downtown",
+      "occupation": "restaurant owner",
+      "political_trust": 0.4,
+      "susceptibilities": [
+        "merchant testimony",
+        "local business interviews"
+      ]
+    },
+    {
+      "agent_id": "mei",
+      "age": 68,
+      "communication_style": "reflective",
+      "core_values": [
+        "accessibility",
+        "community stability"
+      ],
+      "household_context": "retired and cares for grandchildren twice a week",
+      "initial_confidence": 0.4,
+      "initial_private_stance": 0.05,
+      "initial_public_stance": 0.0,
+      "initial_salience": 0.5,
+      "material_interests": [
+        "medical appointments",
+        "bus fares"
+      ],
+      "media_habits": [
+        "local_news",
+        "neighborhood_group_chat"
+      ],
+      "name": "Mei Chen",
+      "neighborhood": "north end",
+      "occupation": "retired teacher",
+      "political_trust": 0.5,
+      "susceptibilities": [
+        "senior access stories",
+        "neighborhood discussion prompts"
+      ]
+    },
+    {
+      "agent_id": "nora",
+      "age": 34,
+      "communication_style": "empathetic",
+      "core_values": [
+        "child safety",
+        "affordability"
+      ],
+      "household_context": "two school-age children and one car",
+      "initial_confidence": 0.45,
+      "initial_private_stance": 0.15,
+      "initial_public_stance": 0.05,
+      "initial_salience": 0.6,
+      "material_interests": [
+        "school dropoff",
+        "street safety"
+      ],
+      "media_habits": [
+        "local_news",
+        "neighborhood_group_chat"
+      ],
+      "name": "Nora Patel",
+      "neighborhood": "south ridge",
+      "occupation": "elementary school counselor",
+      "political_trust": 0.55,
+      "susceptibilities": [
+        "parent group stories",
+        "public health reports"
+      ]
+    },
+    {
+      "agent_id": "owen",
+      "age": 24,
+      "communication_style": "skeptical",
+      "core_values": [
+        "government accountability",
+        "cost of living"
+      ],
+      "household_context": "shares an apartment and works variable shifts",
+      "initial_confidence": 0.5,
+      "initial_private_stance": -0.2,
+      "initial_public_stance": -0.1,
+      "initial_salience": 0.5,
+      "material_interests": [
+        "ride-share costs",
+        "downtown parking"
+      ],
+      "media_habits": [
+        "local_news",
+        "neighborhood_group_chat"
+      ],
+      "name": "Owen Kim",
+      "neighborhood": "river flats",
+      "occupation": "retail worker",
+      "political_trust": 0.2,
+      "susceptibilities": [
+        "viral clips",
+        "revenue motive allegations"
+      ]
+    },
+    {
+      "agent_id": "sara",
+      "age": 46,
+      "communication_style": "consensus-oriented",
+      "core_values": [
+        "civic trust",
+        "practical compromise"
+      ],
+      "household_context": "commutes by bus three days a week",
+      "initial_confidence": 0.55,
+      "initial_private_stance": 0.25,
+      "initial_public_stance": 0.2,
+      "initial_salience": 0.55,
+      "material_interests": [
+        "transit reliability",
+        "fair exemptions"
+      ],
+      "media_habits": [
+        "local_news",
+        "neighborhood_group_chat"
+      ],
+      "name": "Sara Williams",
+      "neighborhood": "midtown",
+      "occupation": "library branch manager",
+      "political_trust": 0.65,
+      "susceptibilities": [
+        "newspaper fact-checks",
+        "neighborhood discussion prompts"
+      ]
+    }
+  ],
+  "channels": [
+    {
+      "channel_id": "neighborhood_group_chat",
+      "type": "group_chat"
+    }
+  ],
+  "days": 7,
+  "events": [
+    {
+      "affected_interests": [
+        "commute time",
+        "bus reliability",
+        "air quality"
+      ],
+      "audience_filter": {
+        "media_habits_any": [
+          "local_news",
+          "neighborhood_group_chat"
+        ]
+      },
+      "content": "City Hall proposes a weekday downtown congestion charge and says revenue will fund transit discounts.",
+      "credibility": 0.8,
+      "day": 1,
+      "emotional_intensity": 0.25,
+      "event_id": "city_announcement",
+      "policy_stance": 0.35,
+      "source": "City Hall",
+      "source_type": "official",
+      "title": "City announcement"
+    },
+    {
+      "affected_interests": [
+        "fuel cost",
+        "delivery time",
+        "cost of living"
+      ],
+      "audience_filter": {
+        "media_habits_any": [
+          "local_news",
+          "neighborhood_group_chat"
+        ]
+      },
+      "content": "A taxi driver describes thinner margins and fears the charge will push shift workers out of downtown.",
+      "credibility": 0.6,
+      "day": 2,
+      "emotional_intensity": 0.55,
+      "event_id": "taxi_driver_livelihood_story",
+      "policy_stance": -0.5,
+      "source": "Evening Local News",
+      "source_type": "media",
+      "title": "Taxi driver livelihood story"
+    },
+    {
+      "affected_interests": [
+        "air quality",
+        "child safety",
+        "public health"
+      ],
+      "audience_filter": {
+        "media_habits_any": [
+          "local_news",
+          "neighborhood_group_chat"
+        ]
+      },
+      "content": "A public-health report links downtown traffic peaks to asthma visits and estimates reduced exposure near schools.",
+      "credibility": 0.85,
+      "day": 3,
+      "emotional_intensity": 0.35,
+      "event_id": "public_health_report",
+      "policy_stance": 0.55,
+      "source": "County Public Health Office",
+      "source_type": "official",
+      "title": "Public-health report"
+    },
+    {
+      "affected_interests": [
+        "customer traffic",
+        "supplier costs",
+        "downtown parking"
+      ],
+      "audience_filter": {
+        "media_habits_any": [
+          "local_news",
+          "neighborhood_group_chat"
+        ]
+      },
+      "content": "A restaurant owner says exemptions and delivery windows matter more than slogans about congestion.",
+      "credibility": 0.65,
+      "day": 4,
+      "emotional_intensity": 0.45,
+      "event_id": "local_business_owner_interview",
+      "policy_stance": -0.3,
+      "source": "Neighborhood Business Podcast",
+      "source_type": "media",
+      "title": "Local business owner interview"
+    },
+    {
+      "affected_interests": [
+        "government accountability",
+        "cost of living",
+        "fair exemptions"
+      ],
+      "audience_filter": {
+        "media_habits_any": [
+          "local_news",
+          "neighborhood_group_chat"
+        ]
+      },
+      "content": "A short viral clip claims the city mainly wants new revenue and leaves out the transit discount details.",
+      "credibility": 0.35,
+      "day": 5,
+      "emotional_intensity": 0.75,
+      "event_id": "viral_clip_revenue_motives",
+      "policy_stance": -0.6,
+      "source": "Shared Video Clip",
+      "source_type": "social_media",
+      "title": "Viral clip alleging revenue motives"
+    },
+    {
+      "affected_interests": [
+        "civic trust",
+        "transit reliability",
+        "fair exemptions"
+      ],
+      "audience_filter": {
+        "media_habits_any": [
+          "local_news",
+          "neighborhood_group_chat"
+        ]
+      },
+      "content": "The local newspaper verifies the revenue formula, planned discounts, and unresolved exemption questions.",
+      "credibility": 0.78,
+      "day": 6,
+      "emotional_intensity": 0.25,
+      "event_id": "local_newspaper_fact_check",
+      "policy_stance": 0.25,
+      "source": "Daily Ledger",
+      "source_type": "media",
+      "title": "Local newspaper fact-check"
+    },
+    {
+      "affected_interests": [
+        "community stability",
+        "fair exemptions",
+        "transit reliability"
+      ],
+      "audience_filter": {
+        "media_habits_any": [
+          "neighborhood_group_chat"
+        ]
+      },
+      "content": "The neighborhood group asks residents to share final views before the council hearing.",
+      "credibility": 0.7,
+      "day": 7,
+      "emotional_intensity": 0.4,
+      "event_id": "final_neighborhood_discussion_prompt",
+      "policy_stance": 0.0,
+      "source": "Neighborhood Group Moderator",
+      "source_type": "community_group",
+      "title": "Final neighborhood discussion prompt"
+    }
+  ],
+  "experiment_name": "event_driven_opinion_dynamics",
+  "output_dir": "runs/event_driven_congestion_pricing_gpt54_mini_pilot_v2",
+  "relationships": [
+    {
+      "channels": [
+        "neighborhood_group_chat"
+      ],
+      "conflict_sensitivity": 0.5,
+      "conversation_frequency": "medium",
+      "relationship_type": "neighbor",
+      "source_agent_id": "jisoo",
+      "target_agent_id": "minho",
+      "trust": 0.6
+    },
+    {
+      "channels": [
+        "neighborhood_group_chat"
+      ],
+      "conflict_sensitivity": 0.35,
+      "conversation_frequency": "medium",
+      "relationship_type": "school_contact",
+      "source_agent_id": "jisoo",
+      "target_agent_id": "nora",
+      "trust": 0.7
+    },
+    {
+      "channels": [
+        "neighborhood_group_chat"
+      ],
+      "conflict_sensitivity": 0.45,
+      "conversation_frequency": "medium",
+      "relationship_type": "civic_group",
+      "source_agent_id": "amara",
+      "target_agent_id": "sara",
+      "trust": 0.75
+    },
+    {
+      "channels": [
+        "neighborhood_group_chat"
+      ],
+      "conflict_sensitivity": 0.6,
+      "conversation_frequency": "high",
+      "relationship_type": "service_contact",
+      "source_agent_id": "minho",
+      "target_agent_id": "carlos",
+      "trust": 0.5
+    },
+    {
+      "channels": [
+        "neighborhood_group_chat"
+      ],
+      "conflict_sensitivity": 0.4,
+      "conversation_frequency": "low",
+      "relationship_type": "neighbor",
+      "source_agent_id": "carlos",
+      "target_agent_id": "owen",
+      "trust": 0.45
+    },
+    {
+      "channels": [
+        "neighborhood_group_chat"
+      ],
+      "conflict_sensitivity": 0.3,
+      "conversation_frequency": "medium",
+      "relationship_type": "library_patron",
+      "source_agent_id": "mei",
+      "target_agent_id": "sara",
+      "trust": 0.65
+    },
+    {
+      "channels": [
+        "neighborhood_group_chat"
+      ],
+      "conflict_sensitivity": 0.55,
+      "conversation_frequency": "medium",
+      "relationship_type": "online_neighbor",
+      "source_agent_id": "owen",
+      "target_agent_id": "amara",
+      "trust": 0.4
+    },
+    {
+      "channels": [
+        "neighborhood_group_chat"
+      ],
+      "conflict_sensitivity": 0.35,
+      "conversation_frequency": "medium",
+      "relationship_type": "neighbor",
+      "source_agent_id": "nora",
+      "target_agent_id": "mei",
+      "trust": 0.6
+    }
+  ],
+  "scenario_name": "congestion_pricing",
+  "seed": 23,
+  "update_policy": {
+    "type": "llm",
+    "provider": "openai_compatible",
+    "model": "gpt-5.4-mini",
+    "base_url": "https://api.openai.com/v1",
+    "api_key_env": "OPENAI_API_KEY",
+    "temperature": 0.0,
+    "max_completion_tokens": 700,
+    "token_limit_parameter": "max_completion_tokens",
+    "timeout_seconds": 45.0,
+    "input_cost_per_1m_tokens": 0.75,
+    "output_cost_per_1m_tokens": 4.5,
+    "max_estimated_cost_usd": 0.5
+  }
+}
