@@ -8,7 +8,12 @@ from pathlib import Path
 import re
 from typing import TypeAlias
 
-from society_simulation.config import Config, ExperimentConfig, NetworkHerdingConfig
+from society_simulation.config import (
+    Config,
+    EventDrivenOpinionConfig,
+    ExperimentConfig,
+    NetworkHerdingConfig,
+)
 
 Scalar: TypeAlias = str | int | float | bool | None
 _FACTOR_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -32,6 +37,18 @@ _SEQUENTIAL_CASCADE_KEYS = {
     "prior_probability",
     "scheduler",
     "observation_policy",
+    "update_policy",
+    "output_dir",
+}
+_EVENT_DRIVEN_OPINION_KEYS = {
+    "experiment_name",
+    "seed",
+    "scenario_name",
+    "days",
+    "agents",
+    "relationships",
+    "events",
+    "channels",
     "update_policy",
     "output_dir",
 }
@@ -174,6 +191,9 @@ def build_experiment_config(data: dict[str, object]) -> Config:
     if data.get("experiment_name") == "network_herding":
         _reject_unknown_keys(data, allowed=_NETWORK_HERDING_KEYS, path="experiment config")
         config = NetworkHerdingConfig.from_dict(data)
+    elif data.get("experiment_name") == "event_driven_opinion_dynamics":
+        _reject_unknown_keys(data, allowed=_EVENT_DRIVEN_OPINION_KEYS, path="experiment config")
+        config = EventDrivenOpinionConfig.from_dict(data)
     else:
         _reject_unknown_keys(data, allowed=_SEQUENTIAL_CASCADE_KEYS, path="experiment config")
         config = ExperimentConfig(**data)

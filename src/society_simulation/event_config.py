@@ -32,6 +32,15 @@ def _require_int(value: object, field: str) -> int:
     return value
 
 
+def _require_float(value: object, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field} must be a number")
+    parsed = float(value)
+    if not isfinite(parsed):
+        raise ValueError(f"{field} must be a finite number")
+    return parsed
+
+
 def _require_non_empty_str(value: object, field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field} must be a non-empty string")
@@ -136,15 +145,143 @@ def _parse_update_policy(value: object) -> Mapping[str, object]:
     return _normalize_update_policy(_require_mapping(value, "update_policy"))
 
 
+_SECRET_UPDATE_POLICY_KEY_PATTERNS = (
+    "api_key",
+    "api-key",
+    "apikey",
+    "authorization",
+    "header",
+)
+_MOCK_PERSONA_UPDATE_POLICY_KEYS = {
+    "type",
+    "response_style",
+    "input_cost_per_1m_tokens",
+    "output_cost_per_1m_tokens",
+}
+_LLM_UPDATE_POLICY_KEYS = {
+    "type",
+    "provider",
+    "api_key_env",
+    "base_url",
+    "model",
+    "temperature",
+    "max_completion_tokens",
+    "token_limit_parameter",
+    "timeout_seconds",
+    "input_cost_per_1m_tokens",
+    "output_cost_per_1m_tokens",
+    "max_estimated_cost_usd",
+}
+
+
 def _normalize_update_policy(value: object) -> Mapping[str, object]:
     policy = dict(_require_free_form_mapping(value, "update_policy"))
+    for key in policy:
+        if not isinstance(key, str):
+            continue
+        if key == "api_key_env":
+            continue
+        if any(pattern in key.lower() for pattern in _SECRET_UPDATE_POLICY_KEY_PATTERNS):
+            raise ValueError(f"secret-bearing update_policy key is not allowed: {key}")
+
     policy_type = _require_non_empty_str(
         _require_field(policy, "type", "update_policy.type"),
         "update_policy.type",
     )
-    if policy_type == "mock_persona" and "response_style" not in policy:
-        policy["response_style"] = "balanced"
+    if policy_type == "mock_persona":
+        return _freeze_json_mapping(_normalize_mock_persona_update_policy(policy), "update_policy")
+    if policy_type == "llm":
+        return _freeze_json_mapping(_normalize_llm_update_policy(policy), "update_policy")
     return _freeze_json_mapping(policy, "update_policy")
+
+
+def _reject_unknown_update_policy_keys(
+    policy: dict[str, object],
+    *,
+    allowed: set[str],
+) -> None:
+    for key in policy:
+        if not isinstance(key, str):
+            raise ValueError("object keys must be strings")
+        if key not in allowed:
+            raise ValueError(f"unsupported update_policy key: {key}")
+
+
+def _optional_non_empty_str(
+    policy: dict[str, object],
+    field: str,
+    normalized: dict[str, object],
+) -> None:
+    if field in policy:
+        normalized[field] = _require_non_empty_str(policy[field], f"update_policy.{field}")
+
+
+def _optional_non_negative_finite_number(
+    policy: dict[str, object],
+    field: str,
+    normalized: dict[str, object],
+) -> None:
+    if field not in policy:
+        return
+    parsed = _require_float(policy[field], f"update_policy.{field}")
+    if parsed < 0:
+        raise ValueError(f"update_policy.{field} must be non-negative")
+    normalized[field] = parsed
+
+
+def _normalize_mock_persona_update_policy(policy: dict[str, object]) -> dict[str, object]:
+    _reject_unknown_update_policy_keys(policy, allowed=_MOCK_PERSONA_UPDATE_POLICY_KEYS)
+    normalized: dict[str, object] = {"type": "mock_persona"}
+    response_style = policy.get("response_style", "balanced")
+    normalized["response_style"] = _require_non_empty_str(
+        response_style,
+        "update_policy.response_style",
+    )
+    _optional_non_negative_finite_number(policy, "input_cost_per_1m_tokens", normalized)
+    _optional_non_negative_finite_number(policy, "output_cost_per_1m_tokens", normalized)
+    return normalized
+
+
+def _normalize_llm_update_policy(policy: dict[str, object]) -> dict[str, object]:
+    _reject_unknown_update_policy_keys(policy, allowed=_LLM_UPDATE_POLICY_KEYS)
+    normalized: dict[str, object] = {"type": "llm"}
+    provider = policy.get("provider")
+    if provider is not None:
+        parsed_provider = _require_non_empty_str(provider, "update_policy.provider")
+        if parsed_provider != "openai_compatible":
+            raise ValueError("unsupported llm provider")
+        normalized["provider"] = parsed_provider
+    normalized["model"] = _require_non_empty_str(
+        _require_field(policy, "model", "update_policy.model"),
+        "llm.model",
+    )
+    for field in ("api_key_env", "base_url", "token_limit_parameter"):
+        _optional_non_empty_str(policy, field, normalized)
+    if "temperature" in policy:
+        temperature = _require_float(policy["temperature"], "update_policy.temperature")
+        if not 0.0 <= temperature <= 2.0:
+            raise ValueError("update_policy.temperature must be between 0 and 2")
+        normalized["temperature"] = temperature
+    if "max_completion_tokens" in policy:
+        max_completion_tokens = _require_int(
+            policy["max_completion_tokens"],
+            "update_policy.max_completion_tokens",
+        )
+        if max_completion_tokens <= 0:
+            raise ValueError("update_policy.max_completion_tokens must be positive")
+        normalized["max_completion_tokens"] = max_completion_tokens
+    if "timeout_seconds" in policy:
+        timeout_seconds = _require_float(policy["timeout_seconds"], "update_policy.timeout_seconds")
+        if timeout_seconds <= 0:
+            raise ValueError("update_policy.timeout_seconds must be positive")
+        normalized["timeout_seconds"] = timeout_seconds
+    for field in (
+        "input_cost_per_1m_tokens",
+        "output_cost_per_1m_tokens",
+        "max_estimated_cost_usd",
+    ):
+        _optional_non_negative_finite_number(policy, field, normalized)
+    return normalized
 
 
 @dataclass(frozen=True)
@@ -223,8 +360,8 @@ class EventDrivenOpinionConfig:
         if len(event_ids) != len(self.events):
             raise ValueError("event ids must be unique")
         for event in self.events:
-            if not 0 <= event.day <= self.days:
-                raise ValueError("event day must be between 0 and days")
+            if not 1 <= event.day <= self.days:
+                raise ValueError("event day must be between 1 and days")
 
         self._validate_update_policy()
 

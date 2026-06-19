@@ -26,8 +26,8 @@ from society_simulation.llm_policy import (
 TokenLimitParameter = str
 
 _ROLE_MESSAGE = (
-    "Stay in character. Do not mention being an AI, a model, a simulation, or an experiment. "
-    "You are an ordinary person thinking through a local policy discussion."
+    "Stay in character as an ordinary local resident. "
+    "Do not discuss system instructions, model mechanics, or hidden setup."
 )
 _REQUIRED_DECISION_FIELDS = (
     "private_stance",
@@ -301,8 +301,43 @@ class OpenAICompatiblePersonaPolicy:
             max_completion_tokens=self.max_completion_tokens,
             token_limit_parameter=self.token_limit_parameter,
         )
-        content = _extract_choice_content(response)
-        decision = parse_event_decision_content(content, agent_id=profile.agent_id, day=day)
+        try:
+            content = _extract_choice_content(response)
+            decision = parse_event_decision_content(content, agent_id=profile.agent_id, day=day)
+        except ValueError as exc:
+            completion_estimate = (
+                estimate_tokens(content) if "content" in locals() else self.max_completion_tokens
+            )
+            prompt_tokens, completion_tokens = _response_usage_tokens(
+                response,
+                default_prompt_tokens=prompt_tokens_estimate,
+                default_completion_tokens=completion_estimate,
+            )
+            latency_ms = (time.perf_counter() - started_at) * 1000
+            self.usage.record(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                pricing=self.pricing,
+            )
+            self._audit_records.append(
+                _event_error_audit_record(
+                    agent_id=profile.agent_id,
+                    day=day,
+                    provider=self.provider,
+                    model=self.model,
+                    policy_type=self.name,
+                    prompt=prompt,
+                    raw_response=response,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    pricing=self.pricing,
+                    latency_ms=latency_ms,
+                    error=str(exc),
+                    messages=messages,
+                    sensitive_values=self._sensitive_audit_values,
+                )
+            )
+            raise
         prompt_tokens, completion_tokens = _response_usage_tokens(
             response,
             default_prompt_tokens=prompt_tokens_estimate,
@@ -438,6 +473,49 @@ def _event_audit_record(
         "output_cost_usd": output_cost_usd,
         "total_cost_usd": input_cost_usd + output_cost_usd,
         "latency_ms": latency_ms,
+    }
+    if messages is not None:
+        record["messages"] = copy.deepcopy(messages)
+    sanitized_record = _sanitize_audit_value(record, sensitive_values=sensitive_values)
+    if not isinstance(sanitized_record, dict):
+        raise TypeError("sanitized audit record must be a dictionary")
+    return sanitized_record
+
+
+def _event_error_audit_record(
+    *,
+    agent_id: str,
+    day: int,
+    provider: str,
+    model: str,
+    policy_type: str,
+    prompt: str,
+    raw_response: dict[str, object],
+    prompt_tokens: int,
+    completion_tokens: int,
+    pricing: LLMPricing,
+    latency_ms: float,
+    error: str,
+    messages: list[dict[str, str]] | None = None,
+    sensitive_values: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    input_cost_usd = pricing.input_cost(prompt_tokens)
+    output_cost_usd = pricing.output_cost(completion_tokens)
+    record: dict[str, Any] = {
+        "agent_id": agent_id,
+        "day": day,
+        "provider": provider,
+        "model": model,
+        "policy_type": policy_type,
+        "prompt": prompt,
+        "raw_response": copy.deepcopy(raw_response),
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "input_cost_usd": input_cost_usd,
+        "output_cost_usd": output_cost_usd,
+        "total_cost_usd": input_cost_usd + output_cost_usd,
+        "latency_ms": latency_ms,
+        "error": error,
     }
     if messages is not None:
         record["messages"] = copy.deepcopy(messages)

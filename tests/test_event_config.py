@@ -123,8 +123,6 @@ def test_event_config_freezes_channel_mappings_after_construction(tmp_path: Path
     ("path", "value"),
     [
         (("channels", 0, "metadata"), {"local_news"}),
-        (("update_policy", "metadata"), float("nan")),
-        (("update_policy", "metadata"), object()),
     ],
 )
 def test_event_config_rejects_unsupported_free_form_values(
@@ -222,7 +220,17 @@ def test_event_config_rejects_event_outside_day_range(tmp_path: Path) -> None:
 
     config = EventDrivenOpinionConfig.from_dict(data)
 
-    with pytest.raises(ValueError, match="event day must be between 0 and days"):
+    with pytest.raises(ValueError, match="event day must be between 1 and days"):
+        config.validate()
+
+
+def test_event_config_rejects_day_zero_event(tmp_path: Path) -> None:
+    data = valid_event_config(tmp_path)
+    data["events"][0]["day"] = 0  # type: ignore[index]
+
+    config = EventDrivenOpinionConfig.from_dict(data)
+
+    with pytest.raises(ValueError, match="event day must be between 1 and days"):
         config.validate()
 
 
@@ -254,10 +262,83 @@ def test_event_config_rejects_empty_llm_model(tmp_path: Path) -> None:
     data = valid_event_config(tmp_path)
     data["update_policy"] = {"type": "llm", "model": ""}
 
+    with pytest.raises(ValueError, match="llm.model must be a non-empty string"):
+        EventDrivenOpinionConfig.from_dict(data)
+
+
+@pytest.mark.parametrize(
+    ("key", "message"),
+    [
+        ("api_key", "secret-bearing update_policy key"),
+        ("Authorization", "secret-bearing update_policy key"),
+        ("api-key", "secret-bearing update_policy key"),
+        ("headers", "secret-bearing update_policy key"),
+    ],
+)
+def test_event_config_rejects_direct_secret_update_policy_keys_before_replay(
+    tmp_path: Path,
+    key: str,
+    message: str,
+) -> None:
+    data = valid_event_config(tmp_path)
+    data["update_policy"] = {"type": "llm", "model": "cheap-chat", key: "secret"}
+
+    with pytest.raises(ValueError, match=message):
+        EventDrivenOpinionConfig.from_dict(data)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("max_completion_tokens", True, "update_policy.max_completion_tokens must be an integer"),
+        ("temperature", "0.7", "update_policy.temperature must be a number"),
+        ("unknown", 1, "unsupported update_policy key"),
+    ],
+)
+def test_event_config_rejects_invalid_llm_update_policy_fields(
+    tmp_path: Path,
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    data = valid_event_config(tmp_path)
+    update_policy: dict[str, object] = {"type": "llm", "model": "cheap-chat"}
+    update_policy[field] = value
+    data["update_policy"] = update_policy
+
+    with pytest.raises(ValueError, match=message):
+        EventDrivenOpinionConfig.from_dict(data)
+
+
+def test_event_config_rejects_mock_persona_unknown_update_policy_key(tmp_path: Path) -> None:
+    data = valid_event_config(tmp_path)
+    data["update_policy"] = {"type": "mock_persona", "response_style": "balanced", "extra": 1}
+
+    with pytest.raises(ValueError, match="unsupported update_policy key"):
+        EventDrivenOpinionConfig.from_dict(data)
+
+
+def test_event_config_accepts_typed_llm_update_policy_fields(tmp_path: Path) -> None:
+    data = valid_event_config(tmp_path)
+    data["update_policy"] = {
+        "type": "llm",
+        "provider": "openai_compatible",
+        "model": "cheap-chat",
+        "api_key_env": "EVENT_LLM_API_KEY",
+        "base_url": "https://example.test/v1",
+        "temperature": 0.7,
+        "max_completion_tokens": 64,
+        "token_limit_parameter": "max_completion_tokens",
+        "timeout_seconds": 10.5,
+        "input_cost_per_1m_tokens": 0.0,
+        "output_cost_per_1m_tokens": 1.25,
+        "max_estimated_cost_usd": 0.5,
+    }
+
     config = EventDrivenOpinionConfig.from_dict(data)
 
-    with pytest.raises(ValueError, match="llm.model must be a non-empty string"):
-        config.validate()
+    config.validate()
+    assert config.update_policy["max_completion_tokens"] == 64
 
 
 def test_event_config_to_dict_is_json_serializable(tmp_path: Path) -> None:

@@ -189,6 +189,8 @@ def test_openai_compatible_persona_policy_sends_human_role_prompt_without_experi
     assert isinstance(messages, list)
     prompt_text = json.dumps(messages)
     assert "Stay in character" in prompt_text
+    assert "simulation" not in prompt_text.lower()
+    assert "experiment" not in prompt_text.lower()
     assert "social network experiment" not in prompt_text
     assert "secret-key" not in json.dumps(policy.audit_records(), sort_keys=True)
 
@@ -467,3 +469,47 @@ def test_openai_compatible_persona_policy_redacts_prompt_secrets_from_audit() ->
     assert "Authorization" not in audit_json
     assert "Bearer" not in audit_json
     assert "api_key" not in audit_json
+
+
+def test_openai_compatible_persona_policy_audits_malformed_paid_response_before_reraising() -> None:
+    def transport(
+        url: str,
+        headers: dict[str, str],
+        payload: dict[str, object],
+        timeout_seconds: float,
+    ) -> dict[str, object]:
+        del url, headers, payload, timeout_seconds
+        return {
+            "choices": [{"message": {"content": "not json secret-key"}}],
+            "usage": {"prompt_tokens": 11, "completion_tokens": 7},
+            "metadata": {"api_key": "secret-key"},
+        }
+
+    policy = OpenAICompatiblePersonaPolicy(
+        model="cheap-chat",
+        api_key="secret-key",
+        base_url="https://example.test/v1",
+        input_cost_per_1m_tokens=1.0,
+        output_cost_per_1m_tokens=2.0,
+        transport=transport,
+    )
+
+    with pytest.raises(ValueError, match="event llm response content must be JSON"):
+        policy.decide(profile(), state(), (exposure(),), day=1)
+
+    records = policy.audit_records()
+    assert len(records) == 1
+    record = records[0]
+    assert record["agent_id"] == "jisoo"
+    assert record["day"] == 1
+    assert record["provider"] == "openai_compatible"
+    assert record["model"] == "cheap-chat"
+    assert record["policy_type"] == "event_persona"
+    assert record["prompt"]
+    assert record["raw_response"]
+    assert record["prompt_tokens"] == 11
+    assert record["completion_tokens"] == 7
+    assert record["total_cost_usd"] > 0
+    assert record["latency_ms"] >= 0
+    assert "event llm response content must be JSON" in record["error"]
+    assert "secret-key" not in json.dumps(records, sort_keys=True)

@@ -341,3 +341,81 @@ def test_exposure_message_and_state_to_dict_are_json_ready() -> None:
     assert exposure.to_dict()["source_id"] == "taxi_story"
     assert message.to_dict()["recipient_agent_id"] is None
     assert state.to_dict()["emotion"] == "worried"
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        (
+            {
+                "day": -1,
+                "agent_id": "jisoo",
+                "source_type": "event",
+                "source_id": "taxi_story",
+                "channel": "news_feed",
+                "content": "A taxi driver says the fee threatens her income.",
+            },
+            "day must be a non-negative integer",
+        ),
+        (
+            {
+                "day": 1,
+                "agent_id": "",
+                "source_type": "event",
+                "source_id": "taxi_story",
+                "channel": "news_feed",
+                "content": "A taxi driver says the fee threatens her income.",
+            },
+            "agent_id must be a non-empty string",
+        ),
+    ],
+)
+def test_event_exposure_rejects_invalid_fields(
+    kwargs: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        EventExposure(**kwargs)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        (
+            {
+                "day": -1,
+                "sender_agent_id": "minho",
+                "channel": "neighborhood_group_chat",
+                "recipient_agent_id": None,
+                "text": "This fee sounds rough for shift workers.",
+            },
+            "day must be a non-negative integer",
+        ),
+        (
+            {
+                "day": 1,
+                "sender_agent_id": "",
+                "channel": "neighborhood_group_chat",
+                "recipient_agent_id": None,
+                "text": "This fee sounds rough for shift workers.",
+            },
+            "sender_agent_id must be a non-empty string",
+        ),
+        (
+            {
+                "day": 1,
+                "sender_agent_id": "minho",
+                "channel": "neighborhood_group_chat",
+                "recipient_agent_id": 7,
+                "text": "This fee sounds rough for shift workers.",
+            },
+            "recipient_agent_id must be a string or null",
+        ),
+    ],
+)
+def test_event_message_rejects_invalid_fields(
+    kwargs: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        EventMessage(**kwargs)  # type: ignore[arg-type]

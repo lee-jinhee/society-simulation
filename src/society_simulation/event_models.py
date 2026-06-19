@@ -473,6 +473,18 @@ class EventExposure:
     channel: str
     content: str
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "day", _require_non_negative_int(self.day, "day"))
+        object.__setattr__(self, "agent_id", _require_non_empty_str(self.agent_id, "agent_id"))
+        object.__setattr__(
+            self,
+            "source_type",
+            _require_non_empty_str(self.source_type, "source_type"),
+        )
+        object.__setattr__(self, "source_id", _require_non_empty_str(self.source_id, "source_id"))
+        object.__setattr__(self, "channel", _require_non_empty_str(self.channel, "channel"))
+        object.__setattr__(self, "content", _require_non_empty_str(self.content, "content"))
+
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
@@ -484,6 +496,24 @@ class EventMessage:
     channel: str
     recipient_agent_id: str | None
     text: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "day", _require_non_negative_int(self.day, "day"))
+        object.__setattr__(
+            self,
+            "sender_agent_id",
+            _require_non_empty_str(self.sender_agent_id, "sender_agent_id"),
+        )
+        object.__setattr__(self, "channel", _require_non_empty_str(self.channel, "channel"))
+        if self.recipient_agent_id is not None and not isinstance(self.recipient_agent_id, str):
+            raise ValueError("recipient_agent_id must be a string or null")
+        if isinstance(self.recipient_agent_id, str):
+            object.__setattr__(
+                self,
+                "recipient_agent_id",
+                _require_non_empty_str(self.recipient_agent_id, "recipient_agent_id"),
+            )
+        object.__setattr__(self, "text", _require_non_empty_str(self.text, "text"))
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)

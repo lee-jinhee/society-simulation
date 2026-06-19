@@ -6,10 +6,12 @@ import pytest
 from society_simulation.sweep_config import (
     SweepConfig,
     apply_path_override,
+    build_experiment_config,
     expand_sweep,
     load_sweep_config,
     safe_label,
 )
+from tests.test_event_config import valid_event_config
 
 
 def valid_base_config(tmp_path: Path) -> dict[str, object]:
@@ -375,3 +377,10 @@ def test_load_sweep_config_rejects_generated_invalid_experiment_config(
 
     with pytest.raises(ValueError, match="adoption_threshold must be between 0.5 and 1.0"):
         load_sweep_config(path)
+
+
+def test_build_experiment_config_dispatches_event_driven_config(tmp_path: Path) -> None:
+    config = build_experiment_config(valid_event_config(tmp_path))
+
+    assert config.experiment_name == "event_driven_opinion_dynamics"
+    assert config.scenario_name == "congestion_pricing"
