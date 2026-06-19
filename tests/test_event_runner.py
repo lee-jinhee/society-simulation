@@ -105,6 +105,119 @@ def test_event_runner_requires_configured_llm_api_key_env(
         run_experiment(EventDrivenOpinionConfig.from_dict(data))
 
 
+def _copy_state(
+    current_state: EventAgentState,
+    *,
+    agent_id: str | None = None,
+    day: int | None = None,
+) -> EventAgentState:
+    return EventAgentState(
+        agent_id=current_state.agent_id if agent_id is None else agent_id,
+        day=current_state.day if day is None else day,
+        private_stance=current_state.private_stance,
+        public_stance=current_state.public_stance,
+        confidence=current_state.confidence,
+        salience=current_state.salience,
+        emotion=current_state.emotion,
+        memory_summary=current_state.memory_summary,
+        last_private_reasoning=current_state.last_private_reasoning,
+    )
+
+
+def test_event_runner_rejects_policy_state_for_wrong_agent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = valid_event_config(tmp_path)
+    data["days"] = 1
+    data["output_dir"] = str(tmp_path / "wrong-state-agent")
+
+    class WrongAgentStatePolicy:
+        def decide(self, profile, current_state, exposures, *, day):  # type: ignore[no-untyped-def]
+            del profile, exposures
+            return EventPolicyDecision(
+                state=_copy_state(current_state, agent_id="minho", day=day),
+                messages=(),
+            )
+
+    monkeypatch.setattr(event_runner, "_build_event_policy", lambda config: WrongAgentStatePolicy())
+
+    with pytest.raises(ValueError, match="generated state agent_id must match profile"):
+        run_experiment(EventDrivenOpinionConfig.from_dict(data))
+
+    state_rows = [
+        json.loads(line)
+        for line in (Path(data["output_dir"]) / "agent_states.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert len(state_rows) == 2
+    assert {row["day"] for row in state_rows} == {0}
+
+
+def test_event_runner_rejects_policy_state_for_wrong_day(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = valid_event_config(tmp_path)
+    data["days"] = 1
+    data["output_dir"] = str(tmp_path / "wrong-state-day")
+
+    class WrongDayStatePolicy:
+        def decide(self, profile, current_state, exposures, *, day):  # type: ignore[no-untyped-def]
+            del profile, exposures
+            return EventPolicyDecision(
+                state=_copy_state(current_state, day=day + 1),
+                messages=(),
+            )
+
+    monkeypatch.setattr(event_runner, "_build_event_policy", lambda config: WrongDayStatePolicy())
+
+    with pytest.raises(ValueError, match="generated state day must match simulation day"):
+        run_experiment(EventDrivenOpinionConfig.from_dict(data))
+
+    state_rows = [
+        json.loads(line)
+        for line in (Path(data["output_dir"]) / "agent_states.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert len(state_rows) == 2
+    assert {row["day"] for row in state_rows} == {0}
+
+
+def test_event_runner_rejects_generated_message_for_wrong_day(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = valid_event_config(tmp_path)
+    data["days"] = 1
+    data["output_dir"] = str(tmp_path / "wrong-message-day")
+
+    class WrongDayMessagePolicy:
+        def decide(self, profile, current_state, exposures, *, day):  # type: ignore[no-untyped-def]
+            del profile, exposures
+            return EventPolicyDecision(
+                state=_copy_state(current_state, day=day),
+                messages=(
+                    EventMessage(
+                        day=day + 1,
+                        sender_agent_id=current_state.agent_id,
+                        channel="neighborhood_group_chat",
+                        recipient_agent_id=None,
+                        text="This should not be recorded.",
+                    ),
+                ),
+            )
+
+    monkeypatch.setattr(event_runner, "_build_event_policy", lambda config: WrongDayMessagePolicy())
+
+    with pytest.raises(ValueError, match="generated message day must match simulation day"):
+        run_experiment(EventDrivenOpinionConfig.from_dict(data))
+
+    assert (Path(data["output_dir"]) / "messages.jsonl").read_text(encoding="utf-8") == ""
+
+
 def test_event_runner_rejects_generated_message_for_unknown_channel(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

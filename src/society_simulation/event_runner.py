@@ -63,6 +63,12 @@ def run_event_driven_opinion_dynamics(config: EventDrivenOpinionConfig) -> Event
                     profile_agent_id=profile.agent_id,
                     known_agent_ids=known_agent_ids,
                     known_channel_ids=known_channel_ids,
+                    day=day,
+                )
+                _validate_generated_state(
+                    decision.state,
+                    profile_agent_id=profile.agent_id,
+                    day=day,
                 )
                 next_states.append(decision.state)
                 all_messages.extend(decision.messages)
@@ -108,6 +114,7 @@ def _validate_generated_messages(
     profile_agent_id: str,
     known_agent_ids: set[str],
     known_channel_ids: set[str],
+    day: int,
 ) -> None:
     for message in messages:
         if message.sender_agent_id != profile_agent_id:
@@ -121,6 +128,20 @@ def _validate_generated_messages(
             and message.recipient_agent_id not in known_agent_ids
         ):
             raise ValueError("generated message recipient_agent_id is not in agents")
+        if message.day != day:
+            raise ValueError("generated message day must match simulation day")
+
+
+def _validate_generated_state(
+    state: EventAgentState,
+    *,
+    profile_agent_id: str,
+    day: int,
+) -> None:
+    if state.agent_id != profile_agent_id:
+        raise ValueError("generated state agent_id must match profile")
+    if state.day != day:
+        raise ValueError("generated state day must match simulation day")
 
 
 def _write_partial_replay(
