@@ -103,7 +103,12 @@ def test_agent_profile_from_dict_validates_required_fields() -> None:
     assert initial_state.emotion == "calm"
     assert initial_state.memory_summary
     assert initial_state.last_private_reasoning
-    assert profile.to_dict()["name"] == "Jisoo Park"
+    profile_data = profile.to_dict()
+    assert profile_data["name"] == "Jisoo Park"
+    assert profile_data["core_values"] == ["fairness", "public health"]
+    assert profile_data["material_interests"] == ["commute time"]
+    assert profile_data["media_habits"] == ["local_news", "neighborhood_group_chat"]
+    assert profile_data["susceptibilities"] == ["coworker stories"]
 
 
 @pytest.mark.parametrize(
@@ -159,7 +164,9 @@ def test_relationship_from_dict_round_trips() -> None:
 
     assert relationship.trust == 0.72
     assert relationship.channels == ("hospital_group_chat",)
-    assert relationship.to_dict()["target_agent_id"] == "minho"
+    relationship_data = relationship.to_dict()
+    assert relationship_data["target_agent_id"] == "minho"
+    assert relationship_data["channels"] == ["hospital_group_chat"]
 
 
 def test_event_from_dict_supports_audience_filter() -> None:
@@ -225,6 +232,15 @@ def test_event_rejects_non_string_audience_filter_keys() -> None:
     event_kwargs["audience_filter"] = {1: "local_news"}
 
     with pytest.raises(ValueError, match="audience_filter keys must be strings"):
+        OpinionEvent(**event_kwargs)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_event_rejects_non_finite_audience_filter_float(value: float) -> None:
+    event_kwargs = _valid_event_kwargs()
+    event_kwargs["audience_filter"] = {"score": value}
+
+    with pytest.raises(ValueError, match="audience_filter must contain only JSON-compatible values"):
         OpinionEvent(**event_kwargs)  # type: ignore[arg-type]
 
 

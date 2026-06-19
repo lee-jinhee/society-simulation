@@ -83,7 +83,9 @@ def _freeze_audience_filter_value(value: object) -> object:
         return MappingProxyType(copied)
     if isinstance(value, (list, tuple)):
         return tuple(_freeze_audience_filter_value(item) for item in value)
-    if value is None or isinstance(value, (str, int, float, bool)):
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, float) and isfinite(value):
         return value
     raise ValueError("audience_filter must contain only JSON-compatible values")
 
@@ -292,7 +294,7 @@ class EventAgentProfile:
         )
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        return {key: _to_json_ready(value) for key, value in asdict(self).items()}
 
 
 @dataclass(frozen=True)
@@ -363,7 +365,7 @@ class EventRelationship:
         object.__setattr__(self, "channels", _require_str_tuple(self.channels, "channels"))
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        return {key: _to_json_ready(value) for key, value in asdict(self).items()}
 
 
 @dataclass(frozen=True)
