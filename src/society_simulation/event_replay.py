@@ -53,18 +53,20 @@ class EventReplayWriter:
             tuple(state.to_dict() for day_states in states_by_day for state in day_states),
         )
         self._write_json(output_dir / "metrics.json", metrics)
-        if llm_decisions:
-            self._write_jsonl(output_dir / "llm_decisions.jsonl", llm_decisions)
+        self._write_jsonl(output_dir / "llm_decisions.jsonl", llm_decisions)
         self._write_summary(output_dir / "summary.md", metrics)
         return output_dir
 
     def _write_json(self, path: Path, payload: dict[str, Any]) -> None:
-        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        path.write_text(
+            json.dumps(payload, allow_nan=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
     def _write_jsonl(self, path: Path, rows: tuple[dict[str, Any], ...]) -> None:
         with path.open("w", encoding="utf-8") as handle:
             for row in rows:
-                handle.write(json.dumps(row, sort_keys=True) + "\n")
+                handle.write(json.dumps(row, allow_nan=False, sort_keys=True) + "\n")
 
     def _write_summary(self, path: Path, metrics: dict[str, Any]) -> None:
         lines = [

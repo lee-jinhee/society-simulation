@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from tests.test_event_config import valid_event_config
 
 from society_simulation.event_config import EventDrivenOpinionConfig
@@ -8,7 +10,7 @@ from society_simulation.event_models import EventExposure, EventMessage
 from society_simulation.event_replay import EventReplayWriter
 
 
-def test_event_replay_writer_writes_required_artifacts(tmp_path: Path) -> None:
+def _replay_inputs(tmp_path: Path) -> dict[str, object]:
     config = EventDrivenOpinionConfig.from_dict(valid_event_config(tmp_path))
     states_by_day = (
         tuple(agent.initial_state(day=0) for agent in config.agents),
@@ -37,13 +39,27 @@ def test_event_replay_writer_writes_required_artifacts(tmp_path: Path) -> None:
     llm_decisions = (
         {"agent_id": "jisoo", "day": 1, "prompt": "prompt", "raw_response": {"content": "{}"}},
     )
+    return {
+        "config": config,
+        "states_by_day": states_by_day,
+        "exposures": exposures,
+        "messages": messages,
+        "metrics": metrics,
+        "llm_decisions": llm_decisions,
+    }
+
+
+def test_event_replay_writer_writes_required_artifacts(tmp_path: Path) -> None:
+    inputs = _replay_inputs(tmp_path)
+    config = inputs["config"]
+    assert isinstance(config, EventDrivenOpinionConfig)
 
     output_dir = EventReplayWriter(config).write(
-        states_by_day=states_by_day,
-        exposures=exposures,
-        messages=messages,
-        metrics=metrics,
-        llm_decisions=llm_decisions,
+        states_by_day=inputs["states_by_day"],
+        exposures=inputs["exposures"],
+        messages=inputs["messages"],
+        metrics=inputs["metrics"],
+        llm_decisions=inputs["llm_decisions"],
     )
 
     assert output_dir == Path(config.output_dir)
@@ -65,3 +81,91 @@ def test_event_replay_writer_writes_required_artifacts(tmp_path: Path) -> None:
         for line in (output_dir / "agent_states.jsonl").read_text(encoding="utf-8").splitlines()
     ]
     assert state_rows[0]["agent_id"] == "jisoo"
+
+    config_payload = json.loads((output_dir / "config.json").read_text(encoding="utf-8"))
+    assert config_payload["experiment_name"] == "event_driven_opinion_dynamics"
+    agents_payload = json.loads((output_dir / "agents.json").read_text(encoding="utf-8"))
+    assert len(agents_payload["agents"]) == 2
+    relationships_payload = json.loads(
+        (output_dir / "relationships.json").read_text(encoding="utf-8")
+    )
+    assert "relationships" in relationships_payload
+    events_payload = json.loads((output_dir / "events.json").read_text(encoding="utf-8"))
+    assert "events" in events_payload
+    exposure_rows = [
+        json.loads(line)
+        for line in (output_dir / "exposures.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert exposure_rows[0]["source_id"] == "city_announcement"
+    message_rows = [
+        json.loads(line)
+        for line in (output_dir / "messages.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert message_rows[0]["text"] == "I am thinking about the fee."
+    metrics_payload = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
+    assert metrics_payload["agent_count"] == 2
+    decision_rows = [
+        json.loads(line)
+        for line in (output_dir / "llm_decisions.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert decision_rows[0]["agent_id"] == "jisoo"
+    summary = (output_dir / "summary.md").read_text(encoding="utf-8")
+    assert "congestion_pricing" in summary
+    assert "final_private_stance_mean" in summary
+
+
+def test_event_replay_writer_writes_empty_llm_decisions_file(tmp_path: Path) -> None:
+    inputs = _replay_inputs(tmp_path)
+    config = inputs["config"]
+    assert isinstance(config, EventDrivenOpinionConfig)
+
+    output_dir = EventReplayWriter(config).write(
+        states_by_day=inputs["states_by_day"],
+        exposures=inputs["exposures"],
+        messages=inputs["messages"],
+        metrics=inputs["metrics"],
+        llm_decisions=(),
+    )
+
+    decisions_path = output_dir / "llm_decisions.jsonl"
+    assert decisions_path.exists()
+    assert decisions_path.read_text(encoding="utf-8") == ""
+
+
+def test_event_replay_writer_overwrites_stale_llm_decisions(tmp_path: Path) -> None:
+    inputs = _replay_inputs(tmp_path)
+    config = inputs["config"]
+    assert isinstance(config, EventDrivenOpinionConfig)
+    writer = EventReplayWriter(config)
+
+    writer.write(
+        states_by_day=inputs["states_by_day"],
+        exposures=inputs["exposures"],
+        messages=inputs["messages"],
+        metrics=inputs["metrics"],
+        llm_decisions=inputs["llm_decisions"],
+    )
+    output_dir = writer.write(
+        states_by_day=inputs["states_by_day"],
+        exposures=inputs["exposures"],
+        messages=inputs["messages"],
+        metrics=inputs["metrics"],
+        llm_decisions=(),
+    )
+
+    assert (output_dir / "llm_decisions.jsonl").read_text(encoding="utf-8") == ""
+
+
+def test_event_replay_writer_rejects_non_strict_json(tmp_path: Path) -> None:
+    inputs = _replay_inputs(tmp_path)
+    config = inputs["config"]
+    assert isinstance(config, EventDrivenOpinionConfig)
+
+    with pytest.raises(ValueError):
+        EventReplayWriter(config).write(
+            states_by_day=inputs["states_by_day"],
+            exposures=inputs["exposures"],
+            messages=inputs["messages"],
+            metrics={"bad": float("nan")},
+            llm_decisions=inputs["llm_decisions"],
+        )
