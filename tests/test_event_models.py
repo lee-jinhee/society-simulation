@@ -203,6 +203,51 @@ def test_event_from_dict_rejects_non_dict_audience_filter() -> None:
         OpinionEvent.from_dict(event_data)
 
 
+@pytest.mark.parametrize(
+    "audience_filter",
+    [
+        {"bad_set": {"local_news"}},
+        {"bad_object": object()},
+    ],
+)
+def test_event_rejects_unsupported_audience_filter_values(
+    audience_filter: dict[str, object],
+) -> None:
+    event_kwargs = _valid_event_kwargs()
+    event_kwargs["audience_filter"] = audience_filter
+
+    with pytest.raises(ValueError, match="audience_filter must contain only JSON-compatible values"):
+        OpinionEvent(**event_kwargs)  # type: ignore[arg-type]
+
+
+def test_event_rejects_non_string_audience_filter_keys() -> None:
+    event_kwargs = _valid_event_kwargs()
+    event_kwargs["audience_filter"] = {1: "local_news"}
+
+    with pytest.raises(ValueError, match="audience_filter keys must be strings"):
+        OpinionEvent(**event_kwargs)  # type: ignore[arg-type]
+
+
+def test_event_audience_filter_scalar_values_round_trip_through_to_dict() -> None:
+    event_kwargs = _valid_event_kwargs()
+    event_kwargs["audience_filter"] = {
+        "source": "local_news",
+        "count": 2,
+        "weight": 0.75,
+        "trusted": True,
+        "optional": None,
+    }
+    event = OpinionEvent(**event_kwargs)  # type: ignore[arg-type]
+
+    assert event.to_dict()["audience_filter"] == {
+        "source": "local_news",
+        "count": 2,
+        "weight": 0.75,
+        "trusted": True,
+        "optional": None,
+    }
+
+
 def test_event_defensively_copies_audience_filter() -> None:
     audience_filter = {
         "media_habits_any": ["local_news"],

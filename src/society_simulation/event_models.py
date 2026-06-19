@@ -75,11 +75,17 @@ def _require_str_tuple(value: object, field_name: str) -> tuple[str, ...]:
 
 def _freeze_audience_filter_value(value: object) -> object:
     if isinstance(value, dict):
-        copied = {key: _freeze_audience_filter_value(item) for key, item in value.items()}
+        copied: dict[str, object] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ValueError("audience_filter keys must be strings")
+            copied[key] = _freeze_audience_filter_value(item)
         return MappingProxyType(copied)
     if isinstance(value, (list, tuple)):
         return tuple(_freeze_audience_filter_value(item) for item in value)
-    return value
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise ValueError("audience_filter must contain only JSON-compatible values")
 
 
 def _to_json_ready(value: object) -> object:
