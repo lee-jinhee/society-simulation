@@ -19,6 +19,7 @@ from society_simulation.llm_policy import (
     LLMPricing,
     LLMUsage,
     OpenAICompatibleClient,
+    _urllib_json_transport,
     estimate_tokens,
 )
 
@@ -103,7 +104,7 @@ class MockPersonaPolicy:
     ) -> None:
         if provider != "mock":
             raise ValueError("unsupported persona provider")
-        if response_style not in ("balanced", "silent"):
+        if response_style not in ("balanced", "silent", "reactive"):
             raise ValueError("unsupported mock persona response_style")
 
         self.response_style = response_style
@@ -215,13 +216,13 @@ class OpenAICompatiblePersonaPolicy:
         provider: str = "openai_compatible",
         base_url: str = "https://api.openai.com/v1",
         temperature: float = 0.0,
-        max_completion_tokens: int = 512,
+        max_completion_tokens: int = 32,
         token_limit_parameter: TokenLimitParameter = "max_completion_tokens",
         timeout_seconds: float = 30.0,
         input_cost_per_1m_tokens: float = 0.0,
         output_cost_per_1m_tokens: float = 0.0,
         max_estimated_cost_usd: float | None = None,
-        transport: JSONTransport | None = None,
+        transport: JSONTransport = _urllib_json_transport,
     ) -> None:
         if provider != "openai_compatible":
             raise ValueError("unsupported persona provider")
@@ -256,14 +257,12 @@ class OpenAICompatiblePersonaPolicy:
         )
         self.usage = LLMUsage()
         self._audit_records: list[dict[str, Any]] = []
-        client_args: dict[str, object] = {
-            "base_url": base_url,
-            "api_key": api_key,
-            "timeout_seconds": timeout_seconds,
-        }
-        if transport is not None:
-            client_args["transport"] = transport
-        self._client = OpenAICompatibleClient(**client_args)
+        self._client = OpenAICompatibleClient(
+            base_url=base_url,
+            api_key=api_key,
+            timeout_seconds=timeout_seconds,
+            transport=transport,
+        )
 
     def decide(
         self,

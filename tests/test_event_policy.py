@@ -1,4 +1,5 @@
 import json
+from inspect import signature
 
 import pytest
 
@@ -8,6 +9,7 @@ from society_simulation.event_policy import (
     OpenAICompatiblePersonaPolicy,
     parse_event_decision_content,
 )
+from society_simulation.llm_policy import _urllib_json_transport
 
 
 def profile() -> EventAgentProfile:
@@ -101,6 +103,22 @@ def test_mock_persona_policy_silent_style_posts_no_messages() -> None:
     decision = policy.decide(profile(), state(), (exposure(),), day=1)
 
     assert decision.messages == ()
+
+
+def test_mock_persona_policy_reactive_style_posts_message() -> None:
+    policy = MockPersonaPolicy(response_style="reactive")
+
+    decision = policy.decide(profile(), state(), (exposure(),), day=1)
+
+    assert decision.state.private_stance > state().private_stance
+    assert decision.messages
+
+
+def test_openai_compatible_persona_policy_mirrors_llm_constructor_defaults() -> None:
+    parameters = signature(OpenAICompatiblePersonaPolicy).parameters
+
+    assert parameters["max_completion_tokens"].default == 32
+    assert parameters["transport"].default is _urllib_json_transport
 
 
 def test_openai_compatible_persona_policy_sends_human_role_prompt_without_experiment_language() -> None:
