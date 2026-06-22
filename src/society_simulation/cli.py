@@ -16,6 +16,12 @@ EVENT_SUMMARY_FIELDS = (
     "final_public_stance_mean",
     "final_private_public_gap",
 )
+SOCIAL_MEDIA_SUMMARY_FIELDS = (
+    "feed_impression_count",
+    "action_count",
+    "final_follow_edge_count",
+    "final_stance_mean",
+)
 
 
 def _require_action_counts(metrics: dict[str, object]) -> object:
@@ -49,6 +55,18 @@ def _has_event_summary_metrics(metrics: dict[str, object]) -> bool:
     return True
 
 
+def _has_social_media_summary_metrics(metrics: dict[str, object]) -> bool:
+    present = [field for field in SOCIAL_MEDIA_SUMMARY_FIELDS if field in metrics]
+    if not present:
+        return False
+    if len(present) != len(SOCIAL_MEDIA_SUMMARY_FIELDS):
+        raise ValueError(
+            "social media metrics must include feed_impression_count, action_count, "
+            "final_follow_edge_count, and final_stance_mean"
+        )
+    return True
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="society-sim")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -70,8 +88,10 @@ def _run_single_config(parser: argparse.ArgumentParser, config_path: str) -> int
     try:
         result = run_experiment(config)
         metrics = result.metrics
+        has_event_metrics = _has_event_summary_metrics(metrics)
+        has_social_metrics = _has_social_media_summary_metrics(metrics)
         action_counts = (
-            None if _has_event_summary_metrics(metrics) else _require_action_counts(metrics)
+            None if has_event_metrics or has_social_metrics else _require_action_counts(metrics)
         )
     except (OSError, ValueError) as exc:
         parser.error(f"Experiment run failed for '{config_path}': {exc}")
@@ -79,7 +99,7 @@ def _run_single_config(parser: argparse.ArgumentParser, config_path: str) -> int
     print(f"experiment={config.experiment_name}")
     if hasattr(result, "true_state"):
         print(f"true_state={result.true_state}")
-    if _has_event_summary_metrics(metrics):
+    if has_event_metrics:
         print(f"final_private_stance_mean={metrics['final_private_stance_mean']}")
         print(f"final_public_stance_mean={metrics['final_public_stance_mean']}")
         print(f"final_private_public_gap={metrics['final_private_public_gap']}")
@@ -92,6 +112,12 @@ def _run_single_config(parser: argparse.ArgumentParser, config_path: str) -> int
         if "final_speech_action_counts" in metrics:
             print(f"final_speech_action_counts={metrics['final_speech_action_counts']}")
         print(f"message_count={metrics.get('message_count')}")
+    elif has_social_metrics:
+        print(f"feed_impression_count={metrics['feed_impression_count']}")
+        print(f"action_count={metrics['action_count']}")
+        print(f"action_counts={metrics.get('action_counts')}")
+        print(f"final_follow_edge_count={metrics['final_follow_edge_count']}")
+        print(f"final_stance_mean={metrics['final_stance_mean']}")
     else:
         print(f"action_counts={action_counts}")
     if "correct_cascade" in metrics:

@@ -185,6 +185,37 @@ def test_cli_runs_mock_llm_network_config_and_prints_usage(
     assert metrics["llm_usage"]["calls"] == 12
 
 
+def test_cli_runs_instagram_social_config_and_prints_summary(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from tests.test_social_media_config import valid_social_media_config
+
+    config_path = tmp_path / "instagram_social.json"
+    output_dir = tmp_path / "instagram-social-run"
+    data = valid_social_media_config()
+    data["ticks"] = 1
+    data["num_users"] = 4
+    data["historical_posts_per_user"] = 1
+    data["feed_size"] = 2
+    data["output_dir"] = str(output_dir)
+    data["seed_generator"] = dict(data["seed_generator"], mean_following=1)  # type: ignore[arg-type]
+    config_path.write_text(json.dumps(data), encoding="utf-8")
+
+    exit_code = cli.main(["run", str(config_path)])
+
+    assert exit_code == 0
+    output = capsys.readouterr().out
+    assert "experiment=instagram_social_dynamics" in output
+    assert "feed_impression_count=" in output
+    assert "action_count=" in output
+    assert "action_counts=" in output
+    assert "final_follow_edge_count=" in output
+    assert "final_stance_mean=" in output
+    assert f"output_dir={output_dir}" in output
+    assert (output_dir / "summary.md").exists()
+
+
 def test_example_network_config_exists_and_is_valid() -> None:
     from society_simulation.config import NetworkHerdingConfig, load_config
 
@@ -214,6 +245,16 @@ def test_example_openai_compatible_network_config_exists_and_is_valid() -> None:
     assert config.update_policy.type == "llm"
     assert config.update_policy.provider == "openai_compatible"
     assert config.update_policy.api_key_env == "SOCIETY_SIM_LLM_API_KEY"
+
+
+def test_instagram_social_lite_mock_experiment_exists_and_is_valid() -> None:
+    from society_simulation.config import load_config
+    from society_simulation.social_media_config import InstagramSocialDynamicsConfig
+
+    config = load_config("experiments/instagram_social_lite_mock.json")
+
+    assert isinstance(config, InstagramSocialDynamicsConfig)
+    assert config.experiment_name == "instagram_social_dynamics"
 
 
 def test_cli_runs_event_driven_opinion_config_and_prints_event_summary(
