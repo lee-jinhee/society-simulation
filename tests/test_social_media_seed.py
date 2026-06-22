@@ -42,3 +42,32 @@ def test_seed_generator_has_no_self_follows() -> None:
     world = build_initial_world(_config())
 
     assert all(edge.follower_id != edge.followed_id for edge in world.follow_edges)
+
+
+def test_seed_generator_injects_configured_seed_posts() -> None:
+    data = valid_social_media_config()
+    data["num_users"] = 6
+    data["historical_posts_per_user"] = 1
+    data["seed_generator"] = dict(data["seed_generator"], mean_following=2)  # type: ignore[arg-type]
+    data["seed_posts"] = [
+        {
+            "post_id": "endorsement-seed",
+            "author_id": 0,
+            "topic": "transit",
+            "stance": 0.35,
+            "text": "The new bus lane finally makes sense.",
+            "created_tick": 0,
+            "like_count": 80,
+            "reply_count": 3,
+        }
+    ]
+    config = InstagramSocialDynamicsConfig.from_dict(data)
+
+    world = build_initial_world(config)
+
+    seed_post = world.post_by_id()["endorsement-seed"]
+    assert seed_post.author_id == 0
+    assert seed_post.topic == "transit"
+    assert seed_post.like_count == 80
+    assert seed_post.reply_count == 3
+    assert seed_post.seed_post is True

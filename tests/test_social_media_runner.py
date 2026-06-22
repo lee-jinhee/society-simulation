@@ -17,7 +17,7 @@ def _config(tmp_path: Path) -> dict[str, object]:
     data["num_users"] = 5
     data["historical_posts_per_user"] = 1
     data["feed_size"] = 2
-    data["update_policy"] = {"type": "mock_social", "response_style": "endorsement_sensitive"}
+    data["update_policy"] = {"type": "mock_social", "response_style": "balanced"}
     data["output_dir"] = str(tmp_path / "run")
     data["seed_generator"] = dict(data["seed_generator"], mean_following=2)  # type: ignore[arg-type]
     return data

@@ -30,7 +30,10 @@ def build_initial_world(config: InstagramSocialDynamicsConfig) -> SocialMediaWor
     profiles = tuple(_build_profile(index, config, rng) for index in range(config.num_users))
     states = tuple(_initial_state(profile) for profile in profiles)
     follow_edges = _build_follow_edges(config, profiles, rng)
-    posts = _build_historical_posts(config, profiles, rng)
+    posts = (
+        *_build_historical_posts(config, profiles, rng),
+        *_build_configured_seed_posts(config),
+    )
     return SocialMediaWorld(
         profiles=profiles,
         states=states,
@@ -168,3 +171,22 @@ def _build_historical_posts(
                 )
             )
     return tuple(posts)
+
+
+def _build_configured_seed_posts(
+    config: InstagramSocialDynamicsConfig,
+) -> tuple[SocialMediaPost, ...]:
+    return tuple(
+        SocialMediaPost(
+            post_id=str(post["post_id"]),
+            author_id=int(post["author_id"]),
+            topic=str(post["topic"]),
+            stance=float(post["stance"]),
+            text=str(post["text"]),
+            created_tick=int(post["created_tick"]),
+            like_count=int(post["like_count"]),
+            reply_count=int(post.get("reply_count", 0)),
+            seed_post=True,
+        )
+        for post in config.seed_posts
+    )

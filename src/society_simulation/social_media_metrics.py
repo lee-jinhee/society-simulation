@@ -24,6 +24,7 @@ def compute_social_media_metrics(
     states_by_tick: tuple[tuple[SocialMediaUserState, ...], ...],
 ) -> dict[str, Any]:
     action_counts = Counter(action.action_type for action in actions)
+    non_noop_action_count = sum(1 for action in actions if action.action_type != "do_nothing")
     stance_values = [state.stance for state in final_world.states]
     initial_edge_set = {(edge.follower_id, edge.followed_id) for edge in initial_edges}
     final_edge_set = {(edge.follower_id, edge.followed_id) for edge in final_world.follow_edges}
@@ -32,7 +33,7 @@ def compute_social_media_metrics(
         "user_count": len(final_world.profiles),
         "post_count": len(final_world.posts),
         "feed_impression_count": len(feed_items),
-        "action_count": len(actions),
+        "action_count": non_noop_action_count,
         "action_counts": dict(action_counts),
         "like_count": action_counts.get("like_post", 0),
         "dm_count": len(dm_messages),

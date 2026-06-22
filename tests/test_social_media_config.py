@@ -57,6 +57,7 @@ def test_load_instagram_social_config(tmp_path) -> None:
     assert isinstance(config, InstagramSocialDynamicsConfig)
     assert config.experiment_name == "instagram_social_dynamics"
     assert config.feed_policy["type"] == "engagement_ranked"
+    assert config.seed_posts == ()
 
 
 def test_reject_invalid_feed_policy_type() -> None:
@@ -73,3 +74,63 @@ def test_reject_secret_bearing_update_policy_keys() -> None:
 
     with pytest.raises(ValueError, match="secret-bearing update_policy key"):
         InstagramSocialDynamicsConfig.from_dict(data)
+
+
+def test_accept_seed_posts_for_visible_endorsement_scenarios() -> None:
+    data = valid_social_media_config()
+    data["seed_posts"] = [
+        {
+            "post_id": "endorsement-seed",
+            "author_id": 0,
+            "topic": "transit",
+            "stance": 0.35,
+            "text": "The new bus lane finally makes sense.",
+            "created_tick": 0,
+            "like_count": 80,
+            "reply_count": 3,
+        }
+    ]
+
+    config = InstagramSocialDynamicsConfig.from_dict(data)
+    config.validate()
+
+    assert config.seed_posts[0]["post_id"] == "endorsement-seed"
+    assert config.seed_posts[0]["like_count"] == 80
+    assert config.to_dict()["seed_posts"] == data["seed_posts"]
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda post: post.update({"author_id": 99}),
+            "seed_posts\\[0\\].author_id must reference an existing user",
+        ),
+        (
+            lambda post: post.update({"like_count": -1}),
+            "seed_posts\\[0\\].like_count must be non-negative",
+        ),
+        (
+            lambda post: post.update({"topic": "weather"}),
+            "seed_posts\\[0\\].topic must be listed in topics",
+        ),
+    ],
+)
+def test_reject_invalid_seed_posts(mutation, message: str) -> None:
+    data = valid_social_media_config()
+    post = {
+        "post_id": "endorsement-seed",
+        "author_id": 0,
+        "topic": "transit",
+        "stance": 0.35,
+        "text": "The new bus lane finally makes sense.",
+        "created_tick": 0,
+        "like_count": 80,
+        "reply_count": 3,
+    }
+    mutation(post)
+    data["seed_posts"] = [post]
+
+    config = InstagramSocialDynamicsConfig.from_dict(data)
+    with pytest.raises(ValueError, match=message):
+        config.validate()

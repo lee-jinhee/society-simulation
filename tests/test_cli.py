@@ -257,6 +257,26 @@ def test_instagram_social_lite_mock_experiment_exists_and_is_valid() -> None:
     assert config.experiment_name == "instagram_social_dynamics"
 
 
+def test_instagram_visible_endorsement_sweep_exists_and_materializes() -> None:
+    from society_simulation.sweep_config import expand_sweep, load_sweep_config
+
+    sweep = load_sweep_config("experiments/instagram_visible_endorsement_sweep.json")
+    runs = expand_sweep(sweep)
+
+    assert sweep.sweep_name == "instagram_visible_endorsement_sweep"
+    assert len(runs) == 6
+    assert {run.labels["visible_likes"] for run in runs} == {"low", "moderate", "high"}
+    high_run = next(run for run in runs if run.labels["visible_likes"] == "high")
+    seed_posts = high_run.config["seed_posts"]
+    assert isinstance(seed_posts, list)
+    assert seed_posts[0]["post_id"] == "visible-endorsement-seed"
+    assert seed_posts[0]["like_count"] == 80
+    moderate_run = next(run for run in runs if run.labels["visible_likes"] == "moderate")
+    moderate_seed_posts = moderate_run.config["seed_posts"]
+    assert isinstance(moderate_seed_posts, list)
+    assert moderate_seed_posts[0]["like_count"] == 40
+
+
 def test_cli_runs_event_driven_opinion_config_and_prints_event_summary(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

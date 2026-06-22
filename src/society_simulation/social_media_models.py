@@ -149,12 +149,18 @@ class FeedItem:
     rank: int
     source: FeedSource
     reason: str
+    visible_like_count: int = 0
+    topic: str | None = None
+    text: str | None = None
+    author_handle: str | None = None
 
     def __post_init__(self) -> None:
         if self.source not in SUPPORTED_FEED_SOURCES:
             raise ValueError("unsupported feed source")
         if self.rank < 0:
             raise ValueError("rank must be non-negative")
+        if self.visible_like_count < 0:
+            raise ValueError("visible_like_count must be non-negative")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)

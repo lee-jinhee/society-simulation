@@ -96,7 +96,22 @@ class MockSocialMediaPolicy:
                 stance=state.stance,
                 reason="High privacy preference favors a private backchannel.",
             )
-        if self.response_style == "endorsement_sensitive" or top_item.score >= 1.0:
+        if self.response_style == "endorsement_sensitive" and _visible_endorsement_is_persuasive(
+            top_item,
+            profile,
+        ):
+            return PlatformAction(
+                tick=tick,
+                user_id=profile.user_id,
+                action_type="like_post",
+                post_id=top_item.post_id,
+                target_user_id=None,
+                text=None,
+                topic=None,
+                stance=None,
+                reason="High visible endorsement crossed this account's like threshold.",
+            )
+        if self.response_style != "endorsement_sensitive" and top_item.score >= 1.0:
             return PlatformAction(
                 tick=tick,
                 user_id=profile.user_id,
@@ -111,6 +126,17 @@ class MockSocialMediaPolicy:
         return _do_nothing(tick, profile.user_id, "Feed did not cross action threshold.")
 
 
+def _visible_endorsement_is_persuasive(
+    item: FeedItem,
+    profile: SocialMediaUserProfile,
+) -> bool:
+    threshold = 55.0
+    threshold -= profile.conformity * 25.0
+    threshold -= profile.status_weight * 10.0
+    threshold += profile.skepticism * 20.0
+    return item.visible_like_count >= max(5.0, threshold)
+
+
 def build_social_media_prompt(
     *,
     profile: SocialMediaUserProfile,
@@ -119,8 +145,10 @@ def build_social_media_prompt(
     recent_memories: Sequence[str],
 ) -> str:
     feed_lines = [
-        f"- rank={item.rank} post_id={item.post_id} author_id={item.author_id} "
-        f"score={item.score:.2f} source={item.source} reason={item.reason}"
+        f"- rank={item.rank} @{item.author_handle or item.author_id} "
+        f"post_id={item.post_id} topic={item.topic or 'unknown'} "
+        f"likes={item.visible_like_count} likes source={item.source} "
+        f"text={item.text or '[no text]'}"
         for item in feed
     ]
     memories = "\n".join(f"- {memory}" for memory in recent_memories) or "- none"

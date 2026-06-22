@@ -72,7 +72,7 @@ def test_parse_rejects_unknown_action() -> None:
 
 
 def test_mock_policy_likes_high_engagement_feed_item() -> None:
-    policy = MockSocialMediaPolicy(response_style="endorsement_sensitive")
+    policy = MockSocialMediaPolicy(response_style="balanced")
     feed = (
         FeedItem(1, 1, "post-low", 2, 0.1, 1, "following", "x"),
         FeedItem(1, 1, "post-high", 3, 2.0, 0, "explore", "x"),
@@ -82,6 +82,80 @@ def test_mock_policy_likes_high_engagement_feed_item() -> None:
 
     assert action.action_type == "like_post"
     assert action.post_id == "post-high"
+
+
+def test_endorsement_sensitive_mock_policy_does_not_like_score_without_visible_endorsement() -> None:
+    policy = MockSocialMediaPolicy(response_style="endorsement_sensitive")
+    feed = (
+        FeedItem(
+            1,
+            1,
+            "post-score-high",
+            2,
+            2.0,
+            0,
+            "explore",
+            "x",
+            visible_like_count=0,
+            topic="transit",
+            text="Algorithmically relevant but not visibly endorsed.",
+            author_handle="carlos",
+        ),
+    )
+
+    action = policy.decide(profile=_profile(), state=_state(), feed=feed, tick=1)
+
+    assert action.action_type == "do_nothing"
+
+
+def test_endorsement_sensitive_mock_policy_ignores_low_visible_endorsement() -> None:
+    policy = MockSocialMediaPolicy(response_style="endorsement_sensitive")
+    feed = (
+        FeedItem(
+            1,
+            1,
+            "post-low",
+            2,
+            0.2,
+            0,
+            "explore",
+            "x",
+            visible_like_count=0,
+            topic="transit",
+            text="A low-signal post.",
+            author_handle="carlos",
+        ),
+    )
+
+    action = policy.decide(profile=_profile(), state=_state(), feed=feed, tick=1)
+
+    assert action.action_type == "do_nothing"
+
+
+def test_endorsement_sensitive_mock_policy_likes_high_visible_endorsement() -> None:
+    policy = MockSocialMediaPolicy(response_style="endorsement_sensitive")
+    feed = (
+        FeedItem(
+            1,
+            1,
+            "post-high-likes",
+            2,
+            0.2,
+            0,
+            "explore",
+            "x",
+            visible_like_count=80,
+            topic="transit",
+            text="The same post with a lot of visible endorsement.",
+            author_handle="carlos",
+        ),
+    )
+
+    action = policy.decide(profile=_profile(), state=_state(), feed=feed, tick=1)
+
+    assert action.action_type == "like_post"
+    assert action.post_id == "post-high-likes"
+    assert "visible endorsement" in action.reason
 
 
 def test_mock_policy_can_do_nothing_on_empty_feed() -> None:
@@ -96,12 +170,30 @@ def test_social_media_prompt_does_not_reveal_experiment() -> None:
     prompt = build_social_media_prompt(
         profile=_profile(),
         state=_state(),
-        feed=(),
+        feed=(
+            FeedItem(
+                1,
+                1,
+                "post-1",
+                2,
+                1.0,
+                0,
+                "following",
+                "x",
+                visible_like_count=80,
+                topic="transit",
+                text="The new bus lane finally makes sense.",
+                author_handle="carlos",
+            ),
+        ),
         recent_memories=(),
     )
 
     assert "simulating a social network experiment" not in prompt.lower()
     assert "instagram-like app" in prompt.lower()
+    assert "80 likes" in prompt
+    assert "@carlos" in prompt
+    assert "The new bus lane finally makes sense." in prompt
 
 
 def test_parse_create_post_action() -> None:

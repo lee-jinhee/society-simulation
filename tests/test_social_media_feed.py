@@ -105,6 +105,10 @@ def test_engagement_ranked_can_surface_explore_post() -> None:
 
     assert [item.post_id for item in feed][0] == "post-2"
     assert feed[0].source == "explore"
+    assert feed[0].visible_like_count == 40
+    assert feed[0].topic == "housing"
+    assert feed[0].text == "rent thread"
+    assert feed[0].author_handle == "user_2"
 
 
 def test_no_feed_control_returns_empty_feed() -> None:

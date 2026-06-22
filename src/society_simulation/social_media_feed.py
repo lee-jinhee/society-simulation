@@ -45,6 +45,10 @@ def build_feed(
             rank=rank,
             source="following" if post.author_id in followed_ids else "explore",
             reason=reason,
+            visible_like_count=post.like_count,
+            topic=post.topic,
+            text=post.text,
+            author_handle=world.profile_by_id()[post.author_id].handle,
         )
         for rank, (score, post, reason) in enumerate(ranked[:feed_size])
     )

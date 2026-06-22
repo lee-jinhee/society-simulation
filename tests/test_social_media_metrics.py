@@ -46,6 +46,7 @@ def test_metrics_count_actions_and_graph_churn() -> None:
     actions = (
         PlatformAction(1, 0, "like_post", "post-1", None, None, None, None, "liked"),
         PlatformAction(1, 1, "follow_user", None, 0, None, None, None, "followed"),
+        PlatformAction(1, 0, "do_nothing", None, None, None, None, None, "ignored"),
     )
 
     metrics = compute_social_media_metrics(
@@ -59,5 +60,6 @@ def test_metrics_count_actions_and_graph_churn() -> None:
 
     assert metrics["action_count"] == 2
     assert metrics["action_counts"]["like_post"] == 1
+    assert metrics["action_counts"]["do_nothing"] == 1
     assert metrics["follow_edge_delta"] == 1
     assert metrics["dm_count"] == 1

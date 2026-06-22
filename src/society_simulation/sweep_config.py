@@ -67,6 +67,7 @@ _INSTAGRAM_SOCIAL_DYNAMICS_KEYS = {
     "feed_policy",
     "update_policy",
     "memory_retrieval",
+    "seed_posts",
     "output_dir",
 }
 

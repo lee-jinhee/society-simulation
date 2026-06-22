@@ -127,6 +127,7 @@ class InstagramSocialDynamicsConfig:
     feed_policy: Mapping[str, object]
     update_policy: Mapping[str, object]
     memory_retrieval: Mapping[str, object]
+    seed_posts: tuple[Mapping[str, object], ...]
     output_dir: str
 
     @classmethod
@@ -170,6 +171,7 @@ class InstagramSocialDynamicsConfig:
                 _require_field(data, "update_policy", "update_policy"),
             ),
             memory_retrieval=_normalize_memory_retrieval(data.get("memory_retrieval")),
+            seed_posts=_normalize_seed_posts(data.get("seed_posts")),
             output_dir=_require_non_empty_str(
                 _require_field(data, "output_dir", "output_dir"),
                 "output_dir",
@@ -187,6 +189,7 @@ class InstagramSocialDynamicsConfig:
         _validate_seed_generator(self.seed_generator)
         _validate_feed_policy(self.feed_policy)
         _validate_update_policy(self.update_policy)
+        _validate_seed_posts(self)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -203,6 +206,7 @@ class InstagramSocialDynamicsConfig:
             "feed_policy": _json_ready(self.feed_policy),
             "update_policy": _json_ready(self.update_policy),
             "memory_retrieval": _json_ready(self.memory_retrieval),
+            "seed_posts": _json_ready(self.seed_posts),
             "output_dir": self.output_dir,
         }
 
@@ -233,6 +237,17 @@ def _normalize_memory_retrieval(value: object | None) -> Mapping[str, object]:
     if limit <= 0:
         raise ValueError("memory_retrieval.limit must be positive")
     return MappingProxyType({"enabled": enabled, "limit": limit})
+
+
+def _normalize_seed_posts(value: object | None) -> tuple[Mapping[str, object], ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ValueError("seed_posts must be a list")
+    return tuple(
+        _freeze_json_mapping(post, f"seed_posts[{index}]")
+        for index, post in enumerate(value)
+    )
 
 
 def _validate_seed_generator(seed_generator: Mapping[str, object]) -> None:
@@ -296,3 +311,31 @@ def _validate_update_policy(update_policy: Mapping[str, object]) -> None:
                 raise ValueError("update_policy.max_estimated_cost_usd must be non-negative")
         return
     raise ValueError("unsupported update_policy type")
+
+
+def _validate_seed_posts(config: InstagramSocialDynamicsConfig) -> None:
+    seen_post_ids: set[str] = set()
+    topics = set(config.topics)
+    for index, post in enumerate(config.seed_posts):
+        prefix = f"seed_posts[{index}]"
+        post_id = _require_non_empty_str(post.get("post_id"), f"{prefix}.post_id")
+        if post_id in seen_post_ids:
+            raise ValueError(f"{prefix}.post_id must be unique")
+        seen_post_ids.add(post_id)
+        author_id = _require_int(post.get("author_id"), f"{prefix}.author_id")
+        if author_id < 0 or author_id >= config.num_users:
+            raise ValueError(f"{prefix}.author_id must reference an existing user")
+        topic = _require_non_empty_str(post.get("topic"), f"{prefix}.topic")
+        if topic not in topics:
+            raise ValueError(f"{prefix}.topic must be listed in topics")
+        stance = _require_float(post.get("stance"), f"{prefix}.stance")
+        if not -1.0 <= stance <= 1.0:
+            raise ValueError(f"{prefix}.stance must be between -1 and 1")
+        _require_non_empty_str(post.get("text"), f"{prefix}.text")
+        _require_int(post.get("created_tick"), f"{prefix}.created_tick")
+        like_count = _require_int(post.get("like_count"), f"{prefix}.like_count")
+        if like_count < 0:
+            raise ValueError(f"{prefix}.like_count must be non-negative")
+        reply_count = _require_int(post.get("reply_count", 0), f"{prefix}.reply_count")
+        if reply_count < 0:
+            raise ValueError(f"{prefix}.reply_count must be non-negative")
