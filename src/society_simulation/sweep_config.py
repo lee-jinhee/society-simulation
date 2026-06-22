@@ -68,6 +68,7 @@ _INSTAGRAM_SOCIAL_DYNAMICS_KEYS = {
     "update_policy",
     "memory_retrieval",
     "seed_posts",
+    "ad_campaigns",
     "output_dir",
 }
 
@@ -192,17 +193,45 @@ def apply_path_override(config: dict[str, object], path: str, value: object) -> 
     if not parts or any(part == "" for part in parts):
         raise ValueError("path must be a non-empty dotted string")
 
-    target = config
+    target: object = config
     traversed: list[str] = []
     for part in parts[:-1]:
         traversed.append(part)
-        next_value = target.get(part)
-        if not isinstance(next_value, dict):
-            raise ValueError(f"traverses non-object field {'.'.join(traversed)}")
+        if isinstance(target, dict):
+            next_value = target.get(part)
+        elif isinstance(target, list):
+            next_value = _list_item(target, part, ".".join(traversed))
+        else:
+            raise ValueError(f"traverses non-object field {'.'.join(traversed[:-1])}")
+        if not isinstance(next_value, (dict, list)):
+            if part != parts[-2]:
+                raise ValueError(f"traverses non-object field {'.'.join(traversed)}")
         target = next_value
-    if parts[-1] not in target:
-        raise ValueError(f"factor path {path} does not exist")
-    target[parts[-1]] = value
+    final_part = parts[-1]
+    if isinstance(target, dict):
+        if final_part not in target:
+            raise ValueError(f"factor path {path} does not exist")
+        target[final_part] = value
+        return
+    if isinstance(target, list):
+        index = _list_index(target, final_part, path)
+        target[index] = value
+        return
+    traversed_path = ".".join(parts[:-1])
+    raise ValueError(f"traverses non-object field {traversed_path}")
+
+
+def _list_item(target: list[object], part: str, path: str) -> object:
+    return target[_list_index(target, part, path)]
+
+
+def _list_index(target: list[object], part: str, path: str) -> int:
+    if not part.isdigit():
+        raise ValueError(f"factor path {path} must use a non-negative list index")
+    index = int(part)
+    if index >= len(target):
+        raise ValueError(f"factor path {path} list index is out of range")
+    return index
 
 
 def build_experiment_config(data: dict[str, object]) -> Config:

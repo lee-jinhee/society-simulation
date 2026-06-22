@@ -1,0 +1,135 @@
+{
+  "sweep_name": "instagram_local_coffee_ad_reach_sweep",
+  "base_config": {
+    "experiment_name": "instagram_social_dynamics",
+    "seed": 20260623,
+    "scenario_name": "instagram_local_coffee_ad_reach_base",
+    "ticks": 16,
+    "num_users": 40,
+    "historical_posts_per_user": 3,
+    "feed_size": 5,
+    "activation_probability": 0.9,
+    "topics": ["coffee", "local_events", "food", "commute", "fitness"],
+    "seed_generator": {
+      "type": "synthetic_profiles",
+      "mean_following": 7,
+      "homophily_weight": 0.58,
+      "popularity_weight": 0.25,
+      "random_tie_probability": 0.12,
+      "mutual_follow_probability": 0.35
+    },
+    "feed_policy": {
+      "type": "engagement_ranked",
+      "following_bonus": 1.0,
+      "interest_similarity_weight": 0.75,
+      "stance_similarity_weight": 0.25,
+      "engagement_weight": 0.8,
+      "recency_weight": 0.5,
+      "creator_popularity_weight": 0.2,
+      "controversy_weight": 0.0,
+      "noise_weight": 0.01,
+      "explore_fraction": 0.33
+    },
+    "update_policy": {
+      "type": "mock_social",
+      "response_style": "balanced"
+    },
+    "memory_retrieval": {
+      "enabled": true,
+      "limit": 5
+    },
+    "ad_campaigns": [
+      {
+        "campaign_id": "maple_3rd_opening",
+        "advertiser_id": 0,
+        "ad_condition": "sponsored_ad",
+        "creative_id": "discount_offer",
+        "creative_text": "Maple & 3rd Coffee opens this weekend. First 100 visitors get a free pastry with any drink.",
+        "topic": "coffee",
+        "stance": 0.2,
+        "start_tick": 9,
+        "end_tick": 16,
+        "budget_impressions": 45,
+        "frequency_cap": 2,
+        "targeting": "broad",
+        "sponsored_like_count": 25,
+        "targeting_topics": ["coffee", "food", "commute"]
+      }
+    ],
+    "output_dir": "runs/ignored-by-sweep"
+  },
+  "factors": [
+    {
+      "name": "seed",
+      "path": "seed",
+      "values": [20260623, 20260624]
+    },
+    {
+      "name": "creative_id",
+      "values": [
+        {
+          "label": "discount_offer",
+          "overrides": {
+            "ad_campaigns": [
+              {
+                "campaign_id": "maple_3rd_opening",
+                "advertiser_id": 0,
+                "ad_condition": "sponsored_ad",
+                "creative_id": "discount_offer",
+                "creative_text": "Maple & 3rd Coffee opens this weekend. First 100 visitors get a free pastry with any drink.",
+                "topic": "coffee",
+                "stance": 0.2,
+                "start_tick": 9,
+                "end_tick": 16,
+                "budget_impressions": 45,
+                "frequency_cap": 2,
+                "targeting": "broad",
+                "sponsored_like_count": 25,
+                "targeting_topics": ["coffee", "food", "commute"]
+              }
+            ]
+          }
+        },
+        {
+          "label": "social_proof_offer",
+          "overrides": {
+            "ad_campaigns": [
+              {
+                "campaign_id": "maple_3rd_opening",
+                "advertiser_id": 0,
+                "ad_condition": "sponsored_ad",
+                "creative_id": "social_proof_offer",
+                "creative_text": "Neighbors are already sharing Maple & 3rd Coffee's opening weekend menu. Drop by for espresso, pastries, and a first look.",
+                "topic": "coffee",
+                "stance": 0.2,
+                "start_tick": 9,
+                "end_tick": 16,
+                "budget_impressions": 45,
+                "frequency_cap": 2,
+                "targeting": "broad",
+                "sponsored_like_count": 70,
+                "targeting_topics": ["coffee", "food", "commute"]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ad_condition",
+      "path": "ad_campaigns.0.ad_condition",
+      "values": ["no_ad", "organic_post", "sponsored_ad"]
+    },
+    {
+      "name": "targeting",
+      "path": "ad_campaigns.0.targeting",
+      "values": ["broad", "interest_targeted"]
+    },
+    {
+      "name": "feed_policy",
+      "path": "feed_policy.type",
+      "values": ["chronological_following", "engagement_ranked"]
+    }
+  ],
+  "output_dir": "runs/sweeps/instagram_local_coffee_ad_reach_sweep"
+}

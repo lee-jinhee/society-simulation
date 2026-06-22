@@ -193,6 +193,24 @@ def test_sponsored_ad_does_not_deliver_before_start_tick() -> None:
     assert state.impressions == []
 
 
+def test_sponsored_ad_does_not_deliver_to_advertiser() -> None:
+    campaign = _campaign(targeting="broad")
+    world, state = initialize_ad_delivery(_world(), (campaign,))
+
+    feed = insert_sponsored_ads(
+        world=world,
+        viewer_id=0,
+        tick=3,
+        feed_items=_feed(0),
+        feed_size=2,
+        campaigns=(campaign,),
+        state=state,
+    )
+
+    assert feed == _feed(0)
+    assert state.impressions == []
+
+
 def test_sponsored_ad_respects_total_budget_and_frequency_cap() -> None:
     campaign = _campaign(budget_impressions=2, frequency_cap=1, targeting="broad")
     world, state = initialize_ad_delivery(_world(), (campaign,))

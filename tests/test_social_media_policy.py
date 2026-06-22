@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -82,6 +83,96 @@ def test_mock_policy_likes_high_engagement_feed_item() -> None:
 
     assert action.action_type == "like_post"
     assert action.post_id == "post-high"
+
+
+def test_mock_policy_likes_relevant_discount_ad() -> None:
+    policy = MockSocialMediaPolicy(response_style="balanced")
+    feed = (
+        FeedItem(
+            1,
+            1,
+            "ad-maple",
+            0,
+            3.0,
+            0,
+            "sponsored",
+            "sponsored_broad",
+            visible_like_count=20,
+            topic="transit",
+            text="First 100 visitors get a free pastry with any drink.",
+            author_handle="maple_3rd_coffee",
+            campaign_id="maple_3rd_opening",
+            is_sponsored=True,
+            advertiser_id=0,
+            ad_seen_count=1,
+        ),
+    )
+
+    action = policy.decide(profile=_profile(), state=_state(), feed=feed, tick=1)
+
+    assert action.action_type == "like_post"
+    assert action.post_id == "ad-maple"
+    assert "relevant sponsored offer" in action.reason
+
+
+def test_mock_policy_creates_post_for_relevant_social_proof_ad() -> None:
+    policy = MockSocialMediaPolicy(response_style="balanced")
+    feed = (
+        FeedItem(
+            1,
+            1,
+            "ad-maple",
+            0,
+            3.0,
+            0,
+            "sponsored",
+            "sponsored_targeted",
+            visible_like_count=90,
+            topic="transit",
+            text="Neighbors are already sharing Maple & 3rd Coffee's opening weekend menu.",
+            author_handle="maple_3rd_coffee",
+            campaign_id="maple_3rd_opening",
+            is_sponsored=True,
+            advertiser_id=0,
+            ad_seen_count=1,
+        ),
+    )
+
+    action = policy.decide(profile=_profile(), state=_state(), feed=feed, tick=1)
+
+    assert action.action_type == "create_post"
+    assert action.topic == "transit"
+    assert "social proof" in action.reason
+
+
+def test_mock_policy_ignores_repeated_irrelevant_sponsored_ad() -> None:
+    policy = MockSocialMediaPolicy(response_style="balanced")
+    skeptical_profile = replace(_profile(), interests=("transit",), skepticism=0.9)
+    feed = (
+        FeedItem(
+            3,
+            1,
+            "ad-maple",
+            0,
+            3.0,
+            0,
+            "sponsored",
+            "sponsored_broad",
+            visible_like_count=5,
+            topic="coffee",
+            text="First 100 visitors get a free pastry with any drink.",
+            author_handle="maple_3rd_coffee",
+            campaign_id="maple_3rd_opening",
+            is_sponsored=True,
+            advertiser_id=0,
+            ad_seen_count=3,
+        ),
+    )
+
+    action = policy.decide(profile=skeptical_profile, state=_state(), feed=feed, tick=3)
+
+    assert action.action_type == "do_nothing"
+    assert "repetition" in action.reason
 
 
 def test_endorsement_sensitive_mock_policy_does_not_like_score_without_visible_endorsement() -> None:
@@ -194,6 +285,38 @@ def test_social_media_prompt_does_not_reveal_experiment() -> None:
     assert "80 likes" in prompt
     assert "@carlos" in prompt
     assert "The new bus lane finally makes sense." in prompt
+
+
+def test_social_media_prompt_exposes_sponsored_ad_card_facts() -> None:
+    prompt = build_social_media_prompt(
+        profile=_profile(),
+        state=_state(),
+        feed=(
+            FeedItem(
+                1,
+                1,
+                "ad-maple",
+                0,
+                3.0,
+                0,
+                "sponsored",
+                "sponsored_targeted",
+                visible_like_count=25,
+                topic="transit",
+                text="First 100 visitors get a free pastry with any drink.",
+                author_handle="maple_3rd_coffee",
+                campaign_id="maple_3rd_opening",
+                is_sponsored=True,
+                advertiser_id=0,
+                ad_seen_count=2,
+            ),
+        ),
+        recent_memories=(),
+    )
+
+    assert "label=sponsored" in prompt
+    assert "campaign=maple_3rd_opening" in prompt
+    assert "seen_before=2" in prompt
 
 
 def test_parse_create_post_action() -> None:

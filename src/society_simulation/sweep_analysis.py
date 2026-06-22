@@ -26,6 +26,28 @@ ANALYSIS_METRIC_COLUMNS = (
     "edge_disagreement_rate",
     "component_count",
 )
+AD_NUMERIC_MEAN_FIELDS = (
+    "paid_impression_count",
+    "unique_paid_reach",
+    "organic_ad_impression_count",
+    "unique_organic_ad_reach",
+    "unique_total_ad_reach",
+    "relevant_paid_reach",
+    "relevant_total_reach",
+    "mean_ad_frequency",
+    "max_ad_frequency",
+    "frequency_cap_hit_count",
+    "ad_like_count",
+    "advertiser_follow_count",
+    "ad_dm_count",
+    "ad_generated_post_count",
+    "ad_negative_action_count",
+    "paid_to_organic_spillover_rate",
+    "ad_delivery_remaining_budget",
+    "burn_in_action_mean",
+    "burn_in_follow_churn",
+    "burn_in_exposure_diversity",
+)
 NUMERIC_MEAN_FIELDS = (
     "final_a_fraction",
     "time_to_consensus",
@@ -50,7 +72,9 @@ NUMERIC_MEAN_FIELDS = (
     "final_stance_variance",
     "exposure_diversity",
     "states_recorded",
+    *AD_NUMERIC_MEAN_FIELDS,
 )
+AD_GROUP_SUMMARY_METRICS = tuple(f"mean_{field}" for field in AD_NUMERIC_MEAN_FIELDS)
 GROUP_SUMMARY_METRICS = (
     "consensus_rate",
     "mean_final_a_fraction",
@@ -76,6 +100,7 @@ GROUP_SUMMARY_METRICS = (
     "mean_final_stance_variance",
     "mean_exposure_diversity",
     "mean_states_recorded",
+    *AD_GROUP_SUMMARY_METRICS,
 )
 MANIFEST_COMPARE_FIELDS = ("run_id", "status", "error", "output_dir")
 
@@ -111,6 +136,26 @@ class GroupSummary:
     mean_final_stance_variance: float | None
     mean_exposure_diversity: float | None
     mean_states_recorded: float | None
+    mean_paid_impression_count: float | None
+    mean_unique_paid_reach: float | None
+    mean_organic_ad_impression_count: float | None
+    mean_unique_organic_ad_reach: float | None
+    mean_unique_total_ad_reach: float | None
+    mean_relevant_paid_reach: float | None
+    mean_relevant_total_reach: float | None
+    mean_mean_ad_frequency: float | None
+    mean_max_ad_frequency: float | None
+    mean_frequency_cap_hit_count: float | None
+    mean_ad_like_count: float | None
+    mean_advertiser_follow_count: float | None
+    mean_ad_dm_count: float | None
+    mean_ad_generated_post_count: float | None
+    mean_ad_negative_action_count: float | None
+    mean_paid_to_organic_spillover_rate: float | None
+    mean_ad_delivery_remaining_budget: float | None
+    mean_burn_in_action_mean: float | None
+    mean_burn_in_follow_churn: float | None
+    mean_burn_in_exposure_diversity: float | None
 
     def metric(self, name: str) -> float | None:
         if name not in GROUP_SUMMARY_METRICS:
@@ -148,6 +193,28 @@ class GroupSummary:
             "mean_final_stance_variance": self.mean_final_stance_variance,
             "mean_exposure_diversity": self.mean_exposure_diversity,
             "mean_states_recorded": self.mean_states_recorded,
+            "mean_paid_impression_count": self.mean_paid_impression_count,
+            "mean_unique_paid_reach": self.mean_unique_paid_reach,
+            "mean_organic_ad_impression_count": self.mean_organic_ad_impression_count,
+            "mean_unique_organic_ad_reach": self.mean_unique_organic_ad_reach,
+            "mean_unique_total_ad_reach": self.mean_unique_total_ad_reach,
+            "mean_relevant_paid_reach": self.mean_relevant_paid_reach,
+            "mean_relevant_total_reach": self.mean_relevant_total_reach,
+            "mean_mean_ad_frequency": self.mean_mean_ad_frequency,
+            "mean_max_ad_frequency": self.mean_max_ad_frequency,
+            "mean_frequency_cap_hit_count": self.mean_frequency_cap_hit_count,
+            "mean_ad_like_count": self.mean_ad_like_count,
+            "mean_advertiser_follow_count": self.mean_advertiser_follow_count,
+            "mean_ad_dm_count": self.mean_ad_dm_count,
+            "mean_ad_generated_post_count": self.mean_ad_generated_post_count,
+            "mean_ad_negative_action_count": self.mean_ad_negative_action_count,
+            "mean_paid_to_organic_spillover_rate": (
+                self.mean_paid_to_organic_spillover_rate
+            ),
+            "mean_ad_delivery_remaining_budget": self.mean_ad_delivery_remaining_budget,
+            "mean_burn_in_action_mean": self.mean_burn_in_action_mean,
+            "mean_burn_in_follow_churn": self.mean_burn_in_follow_churn,
+            "mean_burn_in_exposure_diversity": self.mean_burn_in_exposure_diversity,
         }
 
 
@@ -413,6 +480,30 @@ def _group_summary(
         mean_final_stance_variance=metric_means.get("final_stance_variance"),
         mean_exposure_diversity=metric_means.get("exposure_diversity"),
         mean_states_recorded=metric_means.get("states_recorded"),
+        mean_paid_impression_count=metric_means.get("paid_impression_count"),
+        mean_unique_paid_reach=metric_means.get("unique_paid_reach"),
+        mean_organic_ad_impression_count=metric_means.get("organic_ad_impression_count"),
+        mean_unique_organic_ad_reach=metric_means.get("unique_organic_ad_reach"),
+        mean_unique_total_ad_reach=metric_means.get("unique_total_ad_reach"),
+        mean_relevant_paid_reach=metric_means.get("relevant_paid_reach"),
+        mean_relevant_total_reach=metric_means.get("relevant_total_reach"),
+        mean_mean_ad_frequency=metric_means.get("mean_ad_frequency"),
+        mean_max_ad_frequency=metric_means.get("max_ad_frequency"),
+        mean_frequency_cap_hit_count=metric_means.get("frequency_cap_hit_count"),
+        mean_ad_like_count=metric_means.get("ad_like_count"),
+        mean_advertiser_follow_count=metric_means.get("advertiser_follow_count"),
+        mean_ad_dm_count=metric_means.get("ad_dm_count"),
+        mean_ad_generated_post_count=metric_means.get("ad_generated_post_count"),
+        mean_ad_negative_action_count=metric_means.get("ad_negative_action_count"),
+        mean_paid_to_organic_spillover_rate=metric_means.get(
+            "paid_to_organic_spillover_rate"
+        ),
+        mean_ad_delivery_remaining_budget=metric_means.get(
+            "ad_delivery_remaining_budget"
+        ),
+        mean_burn_in_action_mean=metric_means.get("burn_in_action_mean"),
+        mean_burn_in_follow_churn=metric_means.get("burn_in_follow_churn"),
+        mean_burn_in_exposure_diversity=metric_means.get("burn_in_exposure_diversity"),
     )
 
 
@@ -512,6 +603,30 @@ def _toplines(group_summaries: list[GroupSummary]) -> dict[str, ToplineEntry]:
     )
     if stance_variance is not None:
         toplines["highest_final_stance_variance"] = stance_variance
+
+    total_ad_reach = _highest_topline(
+        group_summaries,
+        name="highest_total_ad_reach",
+        metric_value=lambda group: group.mean_unique_total_ad_reach,
+    )
+    if total_ad_reach is not None:
+        toplines["highest_total_ad_reach"] = total_ad_reach
+
+    relevant_total_reach = _highest_topline(
+        group_summaries,
+        name="highest_relevant_total_reach",
+        metric_value=lambda group: group.mean_relevant_total_reach,
+    )
+    if relevant_total_reach is not None:
+        toplines["highest_relevant_total_reach"] = relevant_total_reach
+
+    ad_like_count = _highest_topline(
+        group_summaries,
+        name="highest_ad_like_count",
+        metric_value=lambda group: group.mean_ad_like_count,
+    )
+    if ad_like_count is not None:
+        toplines["highest_ad_like_count"] = ad_like_count
     return toplines
 
 

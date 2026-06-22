@@ -84,6 +84,13 @@ class MockSocialMediaPolicy:
         if not feed:
             return _do_nothing(tick, profile.user_id, "No feed items were available.")
         top_item = sorted(feed, key=lambda item: (-item.score, item.rank))[0]
+        if top_item.campaign_id is not None or top_item.is_sponsored:
+            return _decide_on_ad_item(
+                item=top_item,
+                profile=profile,
+                state=state,
+                tick=tick,
+            )
         if self.response_style == "privacy_sensitive" and profile.privacy_preference > 0.5:
             return PlatformAction(
                 tick=tick,
@@ -137,6 +144,96 @@ def _visible_endorsement_is_persuasive(
     return item.visible_like_count >= max(5.0, threshold)
 
 
+def _decide_on_ad_item(
+    *,
+    item: FeedItem,
+    profile: SocialMediaUserProfile,
+    state: SocialMediaUserState,
+    tick: int,
+) -> PlatformAction:
+    strength = _ad_response_strength(item, profile)
+    advertiser_id = item.advertiser_id if item.advertiser_id is not None else item.author_id
+    text = item.text or "I saw this and thought it looked relevant."
+    topic = item.topic
+    if strength >= 0.78 and _has_social_proof(item) and profile.post_rate >= 0.2:
+        return PlatformAction(
+            tick=tick,
+            user_id=profile.user_id,
+            action_type="create_post",
+            post_id=None,
+            target_user_id=None,
+            text=f"{profile.display_name} is thinking about this: {text}",
+            topic=topic,
+            stance=state.stance,
+            reason="Relevant ad with visible social proof crossed the public-post threshold.",
+        )
+    if strength >= 0.58:
+        return PlatformAction(
+            tick=tick,
+            user_id=profile.user_id,
+            action_type="like_post",
+            post_id=item.post_id,
+            target_user_id=None,
+            text=None,
+            topic=None,
+            stance=None,
+            reason="A relevant sponsored offer crossed this account's like threshold.",
+        )
+    if strength >= 0.48 and profile.privacy_preference > 0.5:
+        return PlatformAction(
+            tick=tick,
+            user_id=profile.user_id,
+            action_type="send_dm",
+            post_id=item.post_id,
+            target_user_id=advertiser_id,
+            text="I saw your sponsored post and wanted to ask about it privately.",
+            topic=topic,
+            stance=state.stance,
+            reason="The ad was relevant, but privacy preference favored a private backchannel.",
+        )
+    if strength >= 0.42:
+        return PlatformAction(
+            tick=tick,
+            user_id=profile.user_id,
+            action_type="follow_user",
+            post_id=item.post_id,
+            target_user_id=advertiser_id,
+            text=None,
+            topic=topic,
+            stance=None,
+            reason="The advertiser looked relevant enough to follow for updates.",
+        )
+    return _do_nothing(
+        tick,
+        profile.user_id,
+        "Sponsored relevance was too weak after skepticism and repetition.",
+    )
+
+
+def _ad_response_strength(item: FeedItem, profile: SocialMediaUserProfile) -> float:
+    strength = 0.0
+    if item.topic in profile.interests:
+        strength += 0.45
+    text = (item.text or "").lower()
+    if any(marker in text for marker in ("free", "discount", "first 100", "offer")):
+        strength += 0.20
+    if _has_social_proof(item):
+        strength += profile.conformity * 0.25
+        strength += min(0.25, item.visible_like_count / 400.0)
+    if item.is_sponsored:
+        strength -= profile.skepticism * 0.25
+    strength -= max(0, item.ad_seen_count - 1) * 0.15
+    return strength
+
+
+def _has_social_proof(item: FeedItem) -> bool:
+    text = (item.text or "").lower()
+    return item.visible_like_count >= 40 or any(
+        marker in text
+        for marker in ("neighbors", "already sharing", "people are sharing", "popular")
+    )
+
+
 def build_social_media_prompt(
     *,
     profile: SocialMediaUserProfile,
@@ -144,13 +241,7 @@ def build_social_media_prompt(
     feed: Sequence[FeedItem],
     recent_memories: Sequence[str],
 ) -> str:
-    feed_lines = [
-        f"- rank={item.rank} @{item.author_handle or item.author_id} "
-        f"post_id={item.post_id} topic={item.topic or 'unknown'} "
-        f"likes={item.visible_like_count} likes source={item.source} "
-        f"text={item.text or '[no text]'}"
-        for item in feed
-    ]
+    feed_lines = [_feed_prompt_line(item) for item in feed]
     memories = "\n".join(f"- {memory}" for memory in recent_memories) or "- none"
     feed_text = "\n".join(feed_lines) or "- no posts are visible right now"
     return (
@@ -169,6 +260,22 @@ def build_social_media_prompt(
         "Return only JSON with keys action_type, post_id, target_user_id, text, topic, "
         "stance, and reason. action_type must be one of like_post, follow_user, "
         "unfollow_user, send_dm, create_post, do_nothing."
+    )
+
+
+def _feed_prompt_line(item: FeedItem) -> str:
+    ad_facts = ""
+    if item.campaign_id is not None or item.is_sponsored:
+        label = "sponsored" if item.is_sponsored else "organic_campaign"
+        ad_facts = (
+            f" label={label} campaign={item.campaign_id or 'unknown'} "
+            f"seen_before={item.ad_seen_count} reason={item.reason}"
+        )
+    return (
+        f"- rank={item.rank} @{item.author_handle or item.author_id} "
+        f"post_id={item.post_id} topic={item.topic or 'unknown'} "
+        f"likes={item.visible_like_count} likes source={item.source}{ad_facts} "
+        f"text={item.text or '[no text]'}"
     )
 
 

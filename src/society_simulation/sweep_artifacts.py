@@ -9,6 +9,33 @@ from pathlib import Path
 
 from society_simulation.sweep_config import MaterializedRun, SweepConfig
 
+AD_METRIC_FIELDS = (
+    "paid_impression_count",
+    "unique_paid_reach",
+    "organic_ad_impression_count",
+    "unique_organic_ad_reach",
+    "unique_total_ad_reach",
+    "relevant_paid_reach",
+    "relevant_total_reach",
+    "mean_ad_frequency",
+    "max_ad_frequency",
+    "frequency_cap_hit_count",
+    "ad_like_count",
+    "advertiser_follow_count",
+    "ad_dm_count",
+    "ad_generated_post_count",
+    "ad_negative_action_count",
+    "paid_to_organic_spillover_rate",
+    "ad_delivery_exhausted_budget",
+    "ad_delivery_remaining_budget",
+    "burn_in_action_mean",
+    "burn_in_follow_churn",
+    "burn_in_exposure_diversity",
+)
+NUMERIC_AD_MEAN_FIELDS = tuple(
+    field for field in AD_METRIC_FIELDS if field != "ad_delivery_exhausted_budget"
+)
+
 METRIC_FIELDS = (
     "final_action_counts_A",
     "final_action_counts_B",
@@ -49,6 +76,7 @@ METRIC_FIELDS = (
     "final_stance_variance",
     "exposure_diversity",
     "states_recorded",
+    *AD_METRIC_FIELDS,
 )
 NUMERIC_MEAN_FIELDS = (
     "final_a_fraction",
@@ -85,6 +113,7 @@ NUMERIC_MEAN_FIELDS = (
     "final_stance_variance",
     "exposure_diversity",
     "states_recorded",
+    *NUMERIC_AD_MEAN_FIELDS,
 )
 MANIFEST_FIELDS = (
     "run_id",

@@ -8,7 +8,11 @@ from society_simulation.sweep_analysis_artifacts import (
     SweepAnalysisArtifactPaths,
     write_analysis_artifacts,
 )
-from tests.test_sweep_analysis import write_analysis_fixture, write_social_analysis_fixture
+from tests.test_sweep_analysis import (
+    write_ad_analysis_fixture,
+    write_analysis_fixture,
+    write_social_analysis_fixture,
+)
 
 
 EXPECTED_GROUP_SUMMARY_FIELDS = [
@@ -41,6 +45,26 @@ EXPECTED_GROUP_SUMMARY_FIELDS = [
     "mean_final_stance_variance",
     "mean_exposure_diversity",
     "mean_states_recorded",
+    "mean_paid_impression_count",
+    "mean_unique_paid_reach",
+    "mean_organic_ad_impression_count",
+    "mean_unique_organic_ad_reach",
+    "mean_unique_total_ad_reach",
+    "mean_relevant_paid_reach",
+    "mean_relevant_total_reach",
+    "mean_mean_ad_frequency",
+    "mean_max_ad_frequency",
+    "mean_frequency_cap_hit_count",
+    "mean_ad_like_count",
+    "mean_advertiser_follow_count",
+    "mean_ad_dm_count",
+    "mean_ad_generated_post_count",
+    "mean_ad_negative_action_count",
+    "mean_paid_to_organic_spillover_rate",
+    "mean_ad_delivery_remaining_budget",
+    "mean_burn_in_action_mean",
+    "mean_burn_in_follow_churn",
+    "mean_burn_in_exposure_diversity",
 ]
 EXPECTED_FAILURE_FIELDS = ["run_id", "status", "error", "output_dir"]
 EXPECTED_EMPTY_SOCIAL_GROUP_METRICS = {
@@ -61,6 +85,26 @@ EXPECTED_EMPTY_SOCIAL_GROUP_METRICS = {
     "mean_final_stance_variance": "",
     "mean_exposure_diversity": "",
     "mean_states_recorded": "",
+    "mean_paid_impression_count": "",
+    "mean_unique_paid_reach": "",
+    "mean_organic_ad_impression_count": "",
+    "mean_unique_organic_ad_reach": "",
+    "mean_unique_total_ad_reach": "",
+    "mean_relevant_paid_reach": "",
+    "mean_relevant_total_reach": "",
+    "mean_mean_ad_frequency": "",
+    "mean_max_ad_frequency": "",
+    "mean_frequency_cap_hit_count": "",
+    "mean_ad_like_count": "",
+    "mean_advertiser_follow_count": "",
+    "mean_ad_dm_count": "",
+    "mean_ad_generated_post_count": "",
+    "mean_ad_negative_action_count": "",
+    "mean_paid_to_organic_spillover_rate": "",
+    "mean_ad_delivery_remaining_budget": "",
+    "mean_burn_in_action_mean": "",
+    "mean_burn_in_follow_churn": "",
+    "mean_burn_in_exposure_diversity": "",
 }
 
 
@@ -273,6 +317,45 @@ def test_write_analysis_artifacts_reports_instagram_social_metrics(
         == 2.1
     )
     assert payload["toplines"]["highest_action_count"]["value"] == "engagement_ranked"
+
+
+def test_write_analysis_artifacts_reports_instagram_ad_metrics(
+    tmp_path: Path,
+) -> None:
+    paths = write_analysis_artifacts(analyze_sweep(write_ad_analysis_fixture(tmp_path)))
+
+    report = paths.report_path.read_text(encoding="utf-8")
+    assert "## Ad Campaign Metrics" in report
+    assert "Synthetic and uncalibrated" in report
+    assert "### ad_condition" in report
+    assert (
+        "| value | runs | completed | failed | mean_paid_impression_count | "
+        "mean_unique_total_ad_reach | mean_relevant_total_reach | "
+        "mean_ad_like_count | mean_advertiser_follow_count | mean_ad_dm_count | "
+        "mean_paid_to_organic_spillover_rate |"
+    ) in report
+    assert (
+        "| sponsored_ad | 2 | 2 | 0 | 16.0000 | 12.0000 | 7.0000 | "
+        "3.5000 | 1.5000 | 1.0000 | 0.3083 |"
+    ) in report
+    assert "## Ad Incrementality" in report
+    assert "| organic_post | 6.0000 | 2.0000 |" in report
+    assert "| sponsored_ad | 12.0000 | 7.0000 |" in report
+
+    with paths.group_summary_csv_path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    sponsored = next(
+        row
+        for row in rows
+        if row["factor"] == "ad_condition" and row["value"] == "sponsored_ad"
+    )
+    assert sponsored["mean_paid_impression_count"] == "16.0000"
+    assert sponsored["mean_unique_total_ad_reach"] == "12.0000"
+    assert sponsored["mean_ad_like_count"] == "3.5000"
+
+    payload = json.loads(paths.group_summary_json_path.read_text(encoding="utf-8"))
+    assert payload["groups"]["ad_condition"]["sponsored_ad"]["mean_unique_total_ad_reach"] == 12.0
+    assert payload["toplines"]["highest_total_ad_reach"]["value"] == "sponsored_ad"
 
 
 def test_failure_summary_csv_includes_failed_and_pending_rows_in_order(

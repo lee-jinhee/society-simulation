@@ -121,6 +121,8 @@ def _can_deliver(
 ) -> bool:
     if campaign.ad_condition != "sponsored_ad":
         return False
+    if viewer_id == campaign.advertiser_id:
+        return False
     if tick < campaign.start_tick or tick > campaign.end_tick:
         return False
     if state.remaining_budget_by_campaign.get(campaign.campaign_id, 0) <= 0:

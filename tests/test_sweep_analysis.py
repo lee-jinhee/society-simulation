@@ -58,6 +58,29 @@ SOCIAL_METRIC_FIELDS = [
     "exposure_diversity",
     "states_recorded",
 ]
+AD_METRIC_FIELDS = [
+    "paid_impression_count",
+    "unique_paid_reach",
+    "organic_ad_impression_count",
+    "unique_organic_ad_reach",
+    "unique_total_ad_reach",
+    "relevant_paid_reach",
+    "relevant_total_reach",
+    "mean_ad_frequency",
+    "max_ad_frequency",
+    "frequency_cap_hit_count",
+    "ad_like_count",
+    "advertiser_follow_count",
+    "ad_dm_count",
+    "ad_generated_post_count",
+    "ad_negative_action_count",
+    "paid_to_organic_spillover_rate",
+    "ad_delivery_exhausted_budget",
+    "ad_delivery_remaining_budget",
+    "burn_in_action_mean",
+    "burn_in_follow_churn",
+    "burn_in_exposure_diversity",
+]
 SOCIAL_SUMMARY_FIELDS = [
     "run_id",
     "seed",
@@ -70,6 +93,23 @@ SOCIAL_SUMMARY_FIELDS = [
     "error",
     *SUMMARY_FIELDS[8:],
     *SOCIAL_METRIC_FIELDS,
+]
+AD_SUMMARY_FIELDS = [
+    "run_id",
+    "seed",
+    "ad_condition",
+    "targeting",
+    "creative_id",
+    "feed_policy",
+    "topology",
+    "threshold",
+    "experiment_name",
+    "output_dir",
+    "status",
+    "error",
+    *SUMMARY_FIELDS[8:],
+    *SOCIAL_METRIC_FIELDS,
+    *AD_METRIC_FIELDS,
 ]
 
 
@@ -377,6 +417,176 @@ def write_social_analysis_fixture(tmp_path: Path) -> Path:
     return sweep_dir
 
 
+def write_ad_analysis_fixture(tmp_path: Path) -> Path:
+    sweep_dir = tmp_path / "instagram_ad_reach_sweep"
+    sweep_dir.mkdir()
+    base_config = valid_social_media_config()
+    base_config["topics"] = ["coffee", "food", "commute"]
+    base_config["output_dir"] = str(sweep_dir / "ignored")
+    base_config["ad_campaigns"] = [
+        {
+            "campaign_id": "maple_3rd_opening",
+            "advertiser_id": 0,
+            "ad_condition": "sponsored_ad",
+            "creative_id": "discount_offer",
+            "creative_text": "First 100 visitors get a free pastry with any drink.",
+            "topic": "coffee",
+            "stance": 0.2,
+            "start_tick": 2,
+            "end_tick": 4,
+            "budget_impressions": 20,
+            "frequency_cap": 2,
+            "targeting": "broad",
+            "sponsored_like_count": 25,
+            "targeting_topics": ["coffee"],
+        }
+    ]
+    (sweep_dir / "sweep_config.json").write_text(
+        json.dumps(
+            {
+                "sweep_name": "instagram_ad_reach_sweep",
+                "base_config": base_config,
+                "factors": [
+                    {"name": "seed", "path": "seed", "values": [1]},
+                    {
+                        "name": "ad_condition",
+                        "path": "ad_campaigns.0.ad_condition",
+                        "values": ["no_ad", "organic_post", "sponsored_ad"],
+                    },
+                    {
+                        "name": "targeting",
+                        "path": "ad_campaigns.0.targeting",
+                        "values": ["broad", "interest_targeted"],
+                    },
+                    {
+                        "name": "creative_id",
+                        "path": "ad_campaigns.0.creative_id",
+                        "values": ["discount_offer"],
+                    },
+                    {
+                        "name": "feed_policy",
+                        "path": "feed_policy.type",
+                        "values": ["engagement_ranked"],
+                    },
+                ],
+                "output_dir": str(sweep_dir),
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    rows = [
+        _ad_summary_row(
+            sweep_dir,
+            run_id="seed-1__ad_condition-no_ad__targeting-broad",
+            ad_condition="no_ad",
+            targeting="broad",
+            paid_impression_count="0",
+            unique_paid_reach="0",
+            organic_ad_impression_count="0",
+            unique_organic_ad_reach="0",
+            unique_total_ad_reach="0",
+            relevant_total_reach="0",
+            mean_ad_frequency="0",
+            max_ad_frequency="0",
+            ad_like_count="0",
+            advertiser_follow_count="0",
+            ad_dm_count="0",
+            ad_generated_post_count="0",
+            paid_to_organic_spillover_rate="0",
+            remaining_budget="20",
+            exhausted_budget="False",
+        ),
+        _ad_summary_row(
+            sweep_dir,
+            run_id="seed-1__ad_condition-organic_post__targeting-broad",
+            ad_condition="organic_post",
+            targeting="broad",
+            paid_impression_count="0",
+            unique_paid_reach="0",
+            organic_ad_impression_count="8",
+            unique_organic_ad_reach="6",
+            unique_total_ad_reach="6",
+            relevant_total_reach="4",
+            mean_ad_frequency="0",
+            max_ad_frequency="0",
+            ad_like_count="1",
+            advertiser_follow_count="1",
+            ad_dm_count="0",
+            ad_generated_post_count="0",
+            paid_to_organic_spillover_rate="0",
+            remaining_budget="20",
+            exhausted_budget="False",
+        ),
+        _ad_summary_row(
+            sweep_dir,
+            run_id="seed-1__ad_condition-sponsored_ad__targeting-broad",
+            ad_condition="sponsored_ad",
+            targeting="broad",
+            paid_impression_count="20",
+            unique_paid_reach="12",
+            organic_ad_impression_count="4",
+            unique_organic_ad_reach="4",
+            unique_total_ad_reach="14",
+            relevant_total_reach="6",
+            mean_ad_frequency="1.666667",
+            max_ad_frequency="2",
+            ad_like_count="3",
+            advertiser_follow_count="1",
+            ad_dm_count="1",
+            ad_generated_post_count="1",
+            paid_to_organic_spillover_rate="0.2",
+            remaining_budget="0",
+            exhausted_budget="True",
+        ),
+        _ad_summary_row(
+            sweep_dir,
+            run_id="seed-1__ad_condition-sponsored_ad__targeting-interest_targeted",
+            ad_condition="sponsored_ad",
+            targeting="interest_targeted",
+            paid_impression_count="12",
+            unique_paid_reach="8",
+            organic_ad_impression_count="5",
+            unique_organic_ad_reach="5",
+            unique_total_ad_reach="10",
+            relevant_total_reach="8",
+            mean_ad_frequency="1.5",
+            max_ad_frequency="2",
+            ad_like_count="4",
+            advertiser_follow_count="2",
+            ad_dm_count="1",
+            ad_generated_post_count="1",
+            paid_to_organic_spillover_rate="0.416667",
+            remaining_budget="8",
+            exhausted_budget="False",
+        ),
+    ]
+    with (sweep_dir / "summary.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=AD_SUMMARY_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+    (sweep_dir / "summary.json").write_text(
+        json.dumps(
+            {
+                "sweep_name": "instagram_ad_reach_sweep",
+                "runs": 4,
+                "completed": 4,
+                "failed": 0,
+                "metric_means": {},
+                "groups": {},
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with (sweep_dir / "manifest.jsonl").open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, sort_keys=True) + "\n")
+    return sweep_dir
+
+
 def _social_summary_row(
     sweep_dir: Path,
     *,
@@ -428,6 +638,85 @@ def _social_summary_row(
             "final_stance_variance": final_stance_variance,
             "exposure_diversity": exposure_diversity,
             "states_recorded": states_recorded,
+        }
+    )
+    return row
+
+
+def _ad_summary_row(
+    sweep_dir: Path,
+    *,
+    run_id: str,
+    ad_condition: str,
+    targeting: str,
+    paid_impression_count: str,
+    unique_paid_reach: str,
+    organic_ad_impression_count: str,
+    unique_organic_ad_reach: str,
+    unique_total_ad_reach: str,
+    relevant_total_reach: str,
+    mean_ad_frequency: str,
+    max_ad_frequency: str,
+    ad_like_count: str,
+    advertiser_follow_count: str,
+    ad_dm_count: str,
+    ad_generated_post_count: str,
+    paid_to_organic_spillover_rate: str,
+    remaining_budget: str,
+    exhausted_budget: str,
+) -> dict[str, str]:
+    row = {field: "" for field in AD_SUMMARY_FIELDS}
+    row.update(
+        {
+            "run_id": run_id,
+            "seed": "1",
+            "ad_condition": ad_condition,
+            "targeting": targeting,
+            "creative_id": "discount_offer",
+            "feed_policy": "engagement_ranked",
+            "experiment_name": "instagram_social_dynamics",
+            "output_dir": str(sweep_dir / "runs" / run_id),
+            "status": "completed",
+            "error": "",
+            "experiment_family": "instagram_social_dynamics",
+            "user_count": "40",
+            "post_count": "80",
+            "feed_impression_count": "480",
+            "action_count": "60",
+            "like_count": "20",
+            "dm_count": "5",
+            "follow_count": "4",
+            "unfollow_count": "1",
+            "initial_follow_edge_count": "120",
+            "final_follow_edge_count": "123",
+            "follow_edge_delta": "3",
+            "new_follow_edge_count": "4",
+            "removed_follow_edge_count": "1",
+            "final_stance_mean": "0.12",
+            "final_stance_variance": "0.08",
+            "exposure_diversity": "3.4",
+            "states_recorded": "200",
+            "paid_impression_count": paid_impression_count,
+            "unique_paid_reach": unique_paid_reach,
+            "organic_ad_impression_count": organic_ad_impression_count,
+            "unique_organic_ad_reach": unique_organic_ad_reach,
+            "unique_total_ad_reach": unique_total_ad_reach,
+            "relevant_paid_reach": relevant_total_reach,
+            "relevant_total_reach": relevant_total_reach,
+            "mean_ad_frequency": mean_ad_frequency,
+            "max_ad_frequency": max_ad_frequency,
+            "frequency_cap_hit_count": "4" if max_ad_frequency == "2" else "0",
+            "ad_like_count": ad_like_count,
+            "advertiser_follow_count": advertiser_follow_count,
+            "ad_dm_count": ad_dm_count,
+            "ad_generated_post_count": ad_generated_post_count,
+            "ad_negative_action_count": "0",
+            "paid_to_organic_spillover_rate": paid_to_organic_spillover_rate,
+            "ad_delivery_exhausted_budget": exhausted_budget,
+            "ad_delivery_remaining_budget": remaining_budget,
+            "burn_in_action_mean": "5.0",
+            "burn_in_follow_churn": "1",
+            "burn_in_exposure_diversity": "2.5",
         }
     )
     return row
@@ -489,6 +778,26 @@ def test_sweep_analysis_dataclasses_match_task_api() -> None:
         "mean_final_stance_variance",
         "mean_exposure_diversity",
         "mean_states_recorded",
+        "mean_paid_impression_count",
+        "mean_unique_paid_reach",
+        "mean_organic_ad_impression_count",
+        "mean_unique_organic_ad_reach",
+        "mean_unique_total_ad_reach",
+        "mean_relevant_paid_reach",
+        "mean_relevant_total_reach",
+        "mean_mean_ad_frequency",
+        "mean_max_ad_frequency",
+        "mean_frequency_cap_hit_count",
+        "mean_ad_like_count",
+        "mean_advertiser_follow_count",
+        "mean_ad_dm_count",
+        "mean_ad_generated_post_count",
+        "mean_ad_negative_action_count",
+        "mean_paid_to_organic_spillover_rate",
+        "mean_ad_delivery_remaining_budget",
+        "mean_burn_in_action_mean",
+        "mean_burn_in_follow_churn",
+        "mean_burn_in_exposure_diversity",
     )
     assert field_names(IncompleteRun) == ("run_id", "status", "error", "output_dir")
     assert field_names(ToplineEntry) == ("name", "factor_name", "value", "metric_value")
@@ -594,6 +903,40 @@ def test_analyze_sweep_computes_instagram_social_group_metrics_and_toplines(
     assert result.toplines["highest_follow_edge_delta"].value == "engagement_ranked"
     assert result.toplines["highest_exposure_diversity"].value == "engagement_ranked"
     assert result.toplines["highest_final_stance_variance"].value == "engagement_ranked"
+
+
+def test_analyze_sweep_computes_instagram_ad_group_metrics_and_toplines(
+    tmp_path: Path,
+) -> None:
+    sweep_dir = write_ad_analysis_fixture(tmp_path)
+
+    result = analyze_sweep(sweep_dir)
+
+    assert result.sweep_name == "instagram_ad_reach_sweep"
+    assert result.factor_names == (
+        "seed",
+        "ad_condition",
+        "targeting",
+        "creative_id",
+        "feed_policy",
+    )
+    sponsored = group_by(result, "ad_condition", "sponsored_ad")
+    assert sponsored.runs == 2
+    assert sponsored.mean_paid_impression_count == pytest.approx(16.0)
+    assert sponsored.mean_unique_total_ad_reach == pytest.approx(12.0)
+    assert sponsored.mean_relevant_total_reach == pytest.approx(7.0)
+    assert sponsored.mean_ad_like_count == pytest.approx(3.5)
+    assert sponsored.mean_paid_to_organic_spillover_rate == pytest.approx(0.3083335)
+    assert sponsored.metric("mean_unique_total_ad_reach") == pytest.approx(12.0)
+
+    targeted = group_by(result, "targeting", "interest_targeted")
+    assert targeted.mean_unique_total_ad_reach == pytest.approx(10.0)
+    assert targeted.mean_relevant_total_reach == pytest.approx(8.0)
+
+    assert result.toplines["highest_total_ad_reach"].factor_name == "ad_condition"
+    assert result.toplines["highest_total_ad_reach"].value == "sponsored_ad"
+    assert result.toplines["highest_relevant_total_reach"].value == "interest_targeted"
+    assert result.toplines["highest_ad_like_count"].value == "interest_targeted"
 
 
 def test_analyze_sweep_rejects_missing_required_file(tmp_path: Path) -> None:

@@ -38,6 +38,26 @@ GROUP_SUMMARY_FIELDS = (
     "mean_final_stance_variance",
     "mean_exposure_diversity",
     "mean_states_recorded",
+    "mean_paid_impression_count",
+    "mean_unique_paid_reach",
+    "mean_organic_ad_impression_count",
+    "mean_unique_organic_ad_reach",
+    "mean_unique_total_ad_reach",
+    "mean_relevant_paid_reach",
+    "mean_relevant_total_reach",
+    "mean_mean_ad_frequency",
+    "mean_max_ad_frequency",
+    "mean_frequency_cap_hit_count",
+    "mean_ad_like_count",
+    "mean_advertiser_follow_count",
+    "mean_ad_dm_count",
+    "mean_ad_generated_post_count",
+    "mean_ad_negative_action_count",
+    "mean_paid_to_organic_spillover_rate",
+    "mean_ad_delivery_remaining_budget",
+    "mean_burn_in_action_mean",
+    "mean_burn_in_follow_churn",
+    "mean_burn_in_exposure_diversity",
 )
 FAILURE_FIELDS = ("run_id", "status", "error", "output_dir")
 
@@ -66,6 +86,26 @@ _GROUP_METRIC_FIELDS = (
     "mean_final_stance_variance",
     "mean_exposure_diversity",
     "mean_states_recorded",
+    "mean_paid_impression_count",
+    "mean_unique_paid_reach",
+    "mean_organic_ad_impression_count",
+    "mean_unique_organic_ad_reach",
+    "mean_unique_total_ad_reach",
+    "mean_relevant_paid_reach",
+    "mean_relevant_total_reach",
+    "mean_mean_ad_frequency",
+    "mean_max_ad_frequency",
+    "mean_frequency_cap_hit_count",
+    "mean_ad_like_count",
+    "mean_advertiser_follow_count",
+    "mean_ad_dm_count",
+    "mean_ad_generated_post_count",
+    "mean_ad_negative_action_count",
+    "mean_paid_to_organic_spillover_rate",
+    "mean_ad_delivery_remaining_budget",
+    "mean_burn_in_action_mean",
+    "mean_burn_in_follow_churn",
+    "mean_burn_in_exposure_diversity",
 )
 _REPORT_GROUP_METRIC_FIELDS = (
     "consensus_rate",
@@ -82,6 +122,15 @@ _REPORT_SOCIAL_METRIC_FIELDS = (
     "mean_final_stance_variance",
     "mean_exposure_diversity",
 )
+_REPORT_AD_METRIC_FIELDS = (
+    "mean_paid_impression_count",
+    "mean_unique_total_ad_reach",
+    "mean_relevant_total_reach",
+    "mean_ad_like_count",
+    "mean_advertiser_follow_count",
+    "mean_ad_dm_count",
+    "mean_paid_to_organic_spillover_rate",
+)
 _TOPLINE_LABELS = {
     "highest_consensus_rate": "Highest consensus rate",
     "highest_polarization": "Highest polarization",
@@ -92,6 +141,9 @@ _TOPLINE_LABELS = {
     "highest_follow_edge_delta": "Highest follow edge delta",
     "highest_exposure_diversity": "Highest exposure diversity",
     "highest_final_stance_variance": "Highest final stance variance",
+    "highest_total_ad_reach": "Highest total ad reach",
+    "highest_relevant_total_reach": "Highest relevant total ad reach",
+    "highest_ad_like_count": "Highest ad like count",
 }
 _NETWORK_TOPLINE_ORDER = (
     "highest_consensus_rate",
@@ -106,7 +158,12 @@ _SOCIAL_TOPLINE_ORDER = (
     "highest_exposure_diversity",
     "highest_final_stance_variance",
 )
-_TOPLINE_ORDER = (*_NETWORK_TOPLINE_ORDER, *_SOCIAL_TOPLINE_ORDER)
+_AD_TOPLINE_ORDER = (
+    "highest_total_ad_reach",
+    "highest_relevant_total_reach",
+    "highest_ad_like_count",
+)
+_TOPLINE_ORDER = (*_NETWORK_TOPLINE_ORDER, *_SOCIAL_TOPLINE_ORDER, *_AD_TOPLINE_ORDER)
 
 
 @dataclass(frozen=True)
@@ -148,9 +205,12 @@ def _write_report(path: Path, result: SweepAnalysisResult) -> None:
         "## Topline",
     ]
     has_social_metrics = _has_social_metrics(result)
+    has_ad_metrics = _has_ad_metrics(result)
     for topline_name in _TOPLINE_ORDER:
         if topline_name not in result.toplines and (
-            has_social_metrics or topline_name in _SOCIAL_TOPLINE_ORDER
+            has_social_metrics
+            or has_ad_metrics
+            or topline_name in (*_SOCIAL_TOPLINE_ORDER, *_AD_TOPLINE_ORDER)
         ):
             continue
         lines.append(_topline_report_line(result, topline_name))
@@ -226,6 +286,51 @@ def _write_report(path: Path, result: SweepAnalysisResult) -> None:
                     )
                     + " |"
                 )
+
+    if has_ad_metrics:
+        lines.extend(
+            [
+                "",
+                "## Ad Campaign Metrics",
+                "Synthetic and uncalibrated: use these tables for relative mechanism screening, not real platform reach prediction.",
+            ]
+        )
+        for factor_name in result.factor_names:
+            lines.extend(
+                [
+                    "",
+                    f"### {_markdown_cell(factor_name)}",
+                    "",
+                    (
+                        "| value | runs | completed | failed | "
+                        + " | ".join(_REPORT_AD_METRIC_FIELDS)
+                        + " |"
+                    ),
+                    _markdown_separator(4 + len(_REPORT_AD_METRIC_FIELDS)),
+                ]
+            )
+            for group in result.group_summaries:
+                if group.factor_name != factor_name:
+                    continue
+                lines.append(
+                    "| "
+                    + " | ".join(
+                        [
+                            _markdown_cell(group.value),
+                            str(group.runs),
+                            str(group.completed),
+                            str(group.failed),
+                            *(
+                                _format_numeric(getattr(group, field))
+                                for field in _REPORT_AD_METRIC_FIELDS
+                            ),
+                        ]
+                    )
+                    + " |"
+                )
+        incrementality_lines = _ad_incrementality_lines(result)
+        if incrementality_lines:
+            lines.extend(["", "## Ad Incrementality", *incrementality_lines])
 
     lines.extend(["", "## Failures"])
     if not result.incomplete_runs:
@@ -320,12 +425,71 @@ def _has_social_metrics(result: SweepAnalysisResult) -> bool:
     )
 
 
+def _has_ad_metrics(result: SweepAnalysisResult) -> bool:
+    return any(
+        getattr(group, field) is not None
+        for group in result.group_summaries
+        for field in _REPORT_AD_METRIC_FIELDS
+    )
+
+
 def _has_network_report_metrics(result: SweepAnalysisResult) -> bool:
     return any(
         getattr(group, field) is not None
         for group in result.group_summaries
         for field in _REPORT_GROUP_METRIC_FIELDS
     )
+
+
+def _ad_incrementality_lines(result: SweepAnalysisResult) -> list[str]:
+    condition_groups = {
+        group.value: group
+        for group in result.group_summaries
+        if group.factor_name == "ad_condition"
+    }
+    baseline = condition_groups.get("no_ad")
+    if baseline is None or baseline.mean_unique_total_ad_reach is None:
+        return []
+    baseline_reach = baseline.mean_unique_total_ad_reach
+    baseline_engagement = _ad_engagement(baseline)
+    lines = [
+        "| condition | total_reach_lift_vs_no_ad | engagement_lift_vs_no_ad |",
+        "| --- | ---: | ---: |",
+    ]
+    for condition in ("organic_post", "sponsored_ad"):
+        group = condition_groups.get(condition)
+        if group is None or group.mean_unique_total_ad_reach is None:
+            continue
+        reach_lift = group.mean_unique_total_ad_reach - baseline_reach
+        engagement_lift = _ad_engagement(group) - baseline_engagement
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _markdown_cell(condition),
+                    _format_numeric(reach_lift),
+                    _format_numeric(engagement_lift),
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
+def _ad_engagement(group) -> float:
+    return sum(
+        value or 0.0
+        for value in (
+            group.mean_ad_like_count,
+            group.mean_advertiser_follow_count,
+            group.mean_ad_dm_count,
+            group.mean_ad_generated_post_count,
+        )
+    )
+
+
+def _markdown_separator(columns: int) -> str:
+    return "| " + " | ".join(["---", *("---:" for _ in range(columns - 1))]) + " |"
 
 
 def _format_numeric(value: float | None) -> str:

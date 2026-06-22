@@ -109,6 +109,27 @@ def test_write_sweep_artifacts_writes_manifest_csv_and_summary_json(
         "final_stance_variance",
         "exposure_diversity",
         "states_recorded",
+        "paid_impression_count",
+        "unique_paid_reach",
+        "organic_ad_impression_count",
+        "unique_organic_ad_reach",
+        "unique_total_ad_reach",
+        "relevant_paid_reach",
+        "relevant_total_reach",
+        "mean_ad_frequency",
+        "max_ad_frequency",
+        "frequency_cap_hit_count",
+        "ad_like_count",
+        "advertiser_follow_count",
+        "ad_dm_count",
+        "ad_generated_post_count",
+        "ad_negative_action_count",
+        "paid_to_organic_spillover_rate",
+        "ad_delivery_exhausted_budget",
+        "ad_delivery_remaining_budget",
+        "burn_in_action_mean",
+        "burn_in_follow_churn",
+        "burn_in_exposure_diversity",
     ]
     assert rows[0]["run_id"] == planned_runs[0].run_id
     assert rows[0]["status"] == "completed"
@@ -392,3 +413,65 @@ def test_write_sweep_artifacts_includes_instagram_social_metrics(
     assert summary["metric_means"]["follow_edge_delta"] == 3.0
     assert summary["metric_means"]["final_stance_variance"] == 0.09
     assert summary["metric_means"]["exposure_diversity"] == 2.75
+
+
+def test_write_sweep_artifacts_includes_instagram_ad_metrics(
+    tmp_path: Path,
+) -> None:
+    sweep = parse_sweep_config(valid_sweep_dict(tmp_path))
+    planned_runs = expand_sweep(sweep)
+    records = (
+        SweepRunRecord(
+            run_id=planned_runs[0].run_id,
+            labels=planned_runs[0].labels,
+            experiment_name="instagram_social_dynamics",
+            output_dir=planned_runs[0].config["output_dir"],
+            status="completed",
+            error=None,
+            metrics={
+                "paid_impression_count": 20,
+                "unique_paid_reach": 12,
+                "organic_ad_impression_count": 4,
+                "unique_organic_ad_reach": 4,
+                "unique_total_ad_reach": 14,
+                "relevant_paid_reach": 6,
+                "relevant_total_reach": 6,
+                "mean_ad_frequency": 1.666667,
+                "max_ad_frequency": 2,
+                "frequency_cap_hit_count": 4,
+                "ad_like_count": 3,
+                "advertiser_follow_count": 1,
+                "ad_dm_count": 1,
+                "ad_generated_post_count": 1,
+                "ad_negative_action_count": 0,
+                "paid_to_organic_spillover_rate": 0.2,
+                "ad_delivery_exhausted_budget": True,
+                "ad_delivery_remaining_budget": 0,
+                "burn_in_action_mean": 5.0,
+                "burn_in_follow_churn": 1,
+                "burn_in_exposure_diversity": 2.5,
+            },
+        ),
+    )
+
+    paths = write_sweep_artifacts(sweep, planned_runs, records)
+
+    manifest_row = json.loads(paths.manifest_path.read_text(encoding="utf-8").splitlines()[0])
+    assert manifest_row["paid_impression_count"] == 20
+    assert manifest_row["unique_total_ad_reach"] == 14
+    assert manifest_row["ad_delivery_exhausted_budget"] is True
+
+    with paths.summary_csv_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        rows = list(reader)
+    assert "paid_impression_count" in (reader.fieldnames or [])
+    assert "unique_total_ad_reach" in (reader.fieldnames or [])
+    assert "burn_in_exposure_diversity" in (reader.fieldnames or [])
+    assert rows[0]["paid_impression_count"] == "20"
+    assert rows[0]["ad_delivery_exhausted_budget"] == "True"
+
+    summary = json.loads(paths.summary_json_path.read_text(encoding="utf-8"))
+    assert summary["metric_means"]["paid_impression_count"] == 20.0
+    assert summary["metric_means"]["unique_total_ad_reach"] == 14.0
+    assert summary["metric_means"]["paid_to_organic_spillover_rate"] == 0.2
+    assert "ad_delivery_exhausted_budget" not in summary["metric_means"]

@@ -305,6 +305,78 @@ def test_social_media_sweep_accepts_nested_feed_policy_override(tmp_path: Path) 
     assert runs[0].config["experiment_name"] == "instagram_social_dynamics"
 
 
+def test_social_media_sweep_accepts_ad_campaign_list_path_override(tmp_path: Path) -> None:
+    data = {
+        "sweep_name": "instagram_ad_reach_sweep",
+        "base_config": {
+            "experiment_name": "instagram_social_dynamics",
+            "seed": 1,
+            "scenario_name": "ad_sweep_base",
+            "ticks": 4,
+            "num_users": 6,
+            "historical_posts_per_user": 1,
+            "feed_size": 2,
+            "activation_probability": 1.0,
+            "topics": ["coffee", "food"],
+            "seed_generator": {
+                "type": "synthetic_profiles",
+                "mean_following": 2,
+                "homophily_weight": 0.55,
+                "popularity_weight": 0.25,
+                "random_tie_probability": 0.10,
+                "mutual_follow_probability": 0.40,
+            },
+            "feed_policy": {
+                "type": "engagement_ranked",
+                "following_bonus": 1.0,
+                "interest_similarity_weight": 0.7,
+                "stance_similarity_weight": 0.3,
+                "engagement_weight": 0.8,
+                "recency_weight": 0.5,
+                "creator_popularity_weight": 0.2,
+                "controversy_weight": 0.0,
+                "noise_weight": 0.01,
+                "explore_fraction": 0.33,
+            },
+            "update_policy": {"type": "mock_social", "response_style": "balanced"},
+            "memory_retrieval": {"enabled": False, "limit": 5},
+            "ad_campaigns": [
+                {
+                    "campaign_id": "maple_3rd_opening",
+                    "advertiser_id": 0,
+                    "ad_condition": "sponsored_ad",
+                    "creative_id": "discount_offer",
+                    "creative_text": "First 100 visitors get a free pastry with any drink.",
+                    "topic": "coffee",
+                    "stance": 0.2,
+                    "start_tick": 2,
+                    "end_tick": 4,
+                    "budget_impressions": 8,
+                    "frequency_cap": 2,
+                    "targeting": "broad",
+                    "sponsored_like_count": 25,
+                    "targeting_topics": ["coffee"],
+                }
+            ],
+            "output_dir": "runs/ignored",
+        },
+        "factors": [
+            {"name": "targeting", "path": "ad_campaigns.0.targeting", "values": ["broad", "interest_targeted"]},
+            {"name": "creative_id", "path": "ad_campaigns.0.creative_id", "values": ["discount_offer", "social_proof_offer"]},
+        ],
+        "output_dir": "runs/sweeps/instagram_ad_reach_sweep",
+    }
+    path = tmp_path / "ad_sweep.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    runs = expand_sweep(load_sweep_config(path))
+
+    assert len(runs) == 4
+    assert runs[0].config["ad_campaigns"][0]["targeting"] == "broad"  # type: ignore[index]
+    assert runs[-1].config["ad_campaigns"][0]["targeting"] == "interest_targeted"  # type: ignore[index]
+    assert runs[-1].config["ad_campaigns"][0]["creative_id"] == "social_proof_offer"  # type: ignore[index]
+
+
 @pytest.mark.parametrize(
     ("mutation", "message"),
     [
