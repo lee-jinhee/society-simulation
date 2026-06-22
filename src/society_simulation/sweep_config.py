@@ -14,6 +14,7 @@ from society_simulation.config import (
     ExperimentConfig,
     NetworkHerdingConfig,
 )
+from society_simulation.social_media_config import InstagramSocialDynamicsConfig
 
 Scalar: TypeAlias = str | int | float | bool | None
 _FACTOR_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -50,6 +51,22 @@ _EVENT_DRIVEN_OPINION_KEYS = {
     "events",
     "channels",
     "update_policy",
+    "output_dir",
+}
+_INSTAGRAM_SOCIAL_DYNAMICS_KEYS = {
+    "experiment_name",
+    "seed",
+    "scenario_name",
+    "ticks",
+    "num_users",
+    "historical_posts_per_user",
+    "feed_size",
+    "activation_probability",
+    "topics",
+    "seed_generator",
+    "feed_policy",
+    "update_policy",
+    "memory_retrieval",
     "output_dir",
 }
 
@@ -194,6 +211,13 @@ def build_experiment_config(data: dict[str, object]) -> Config:
     elif data.get("experiment_name") == "event_driven_opinion_dynamics":
         _reject_unknown_keys(data, allowed=_EVENT_DRIVEN_OPINION_KEYS, path="experiment config")
         config = EventDrivenOpinionConfig.from_dict(data)
+    elif data.get("experiment_name") == "instagram_social_dynamics":
+        _reject_unknown_keys(
+            data,
+            allowed=_INSTAGRAM_SOCIAL_DYNAMICS_KEYS,
+            path="experiment config",
+        )
+        config = InstagramSocialDynamicsConfig.from_dict(data)
     else:
         _reject_unknown_keys(data, allowed=_SEQUENTIAL_CASCADE_KEYS, path="experiment config")
         config = ExperimentConfig(**data)

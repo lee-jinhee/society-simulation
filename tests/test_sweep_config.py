@@ -243,6 +243,68 @@ def test_load_sweep_config_rejects_explicit_null_path_for_override_factor(
         load_sweep_config(path)
 
 
+def test_social_media_sweep_accepts_nested_feed_policy_override(tmp_path: Path) -> None:
+    path = tmp_path / "sweep.json"
+    path.write_text(
+        json.dumps(
+            {
+                "sweep_name": "instagram_feed_policy_sweep",
+                "base_config": {
+                    "experiment_name": "instagram_social_dynamics",
+                    "seed": 1,
+                    "scenario_name": "sweep_base",
+                    "ticks": 2,
+                    "num_users": 6,
+                    "historical_posts_per_user": 1,
+                    "feed_size": 2,
+                    "activation_probability": 1.0,
+                    "topics": ["transit", "housing"],
+                    "seed_generator": {
+                        "type": "synthetic_profiles",
+                        "mean_following": 2,
+                        "homophily_weight": 0.55,
+                        "popularity_weight": 0.25,
+                        "random_tie_probability": 0.10,
+                        "mutual_follow_probability": 0.40,
+                    },
+                    "feed_policy": {
+                        "type": "engagement_ranked",
+                        "following_bonus": 1.0,
+                        "interest_similarity_weight": 0.7,
+                        "stance_similarity_weight": 0.3,
+                        "engagement_weight": 0.8,
+                        "recency_weight": 0.5,
+                        "creator_popularity_weight": 0.2,
+                        "controversy_weight": 0.0,
+                        "noise_weight": 0.01,
+                        "explore_fraction": 0.33,
+                    },
+                    "update_policy": {"type": "mock_social", "response_style": "balanced"},
+                    "memory_retrieval": {"enabled": False, "limit": 5},
+                    "output_dir": "runs/ignored",
+                },
+                "factors": [
+                    {"name": "seed", "path": "seed", "values": [1, 2]},
+                    {
+                        "name": "feed_policy",
+                        "path": "feed_policy.type",
+                        "values": ["chronological_following", "engagement_ranked"],
+                    },
+                ],
+                "output_dir": "runs/sweeps/instagram_feed_policy_sweep",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    sweep = load_sweep_config(path)
+    runs = expand_sweep(sweep)
+
+    assert sweep.sweep_name == "instagram_feed_policy_sweep"
+    assert len(runs) == 4
+    assert runs[0].config["experiment_name"] == "instagram_social_dynamics"
+
+
 @pytest.mark.parametrize(
     ("mutation", "message"),
     [
