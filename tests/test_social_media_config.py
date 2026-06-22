@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -224,3 +225,27 @@ def test_reject_invalid_ad_campaigns(mutation, message: str) -> None:
     config = InstagramSocialDynamicsConfig.from_dict(data)
     with pytest.raises(ValueError, match=message):
         config.validate()
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("campaign_id", "", "ad_campaigns\\[0\\].campaign_id must be non-empty"),
+        ("creative_id", "", "ad_campaigns\\[0\\].creative_id must be non-empty"),
+        ("creative_text", "", "ad_campaigns\\[0\\].creative_text must be non-empty"),
+        ("topic", "", "ad_campaigns\\[0\\].topic must be non-empty"),
+    ],
+)
+def test_validate_rejects_programmatic_empty_ad_campaign_fields(
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    data = valid_social_media_config()
+    data["ad_campaigns"] = [_campaign()]
+    config = InstagramSocialDynamicsConfig.from_dict(data)
+    broken_campaign = replace(config.ad_campaigns[0], **{field: value})
+    broken_config = replace(config, ad_campaigns=(broken_campaign,))
+
+    with pytest.raises(ValueError, match=message):
+        broken_config.validate()

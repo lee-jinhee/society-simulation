@@ -442,6 +442,14 @@ def _validate_ad_campaigns(config: InstagramSocialDynamicsConfig) -> None:
     topics = set(config.topics)
     for index, campaign in enumerate(config.ad_campaigns):
         prefix = f"ad_campaigns[{index}]"
+        if not campaign.campaign_id.strip():
+            raise ValueError(f"{prefix}.campaign_id must be non-empty")
+        if not campaign.creative_id.strip():
+            raise ValueError(f"{prefix}.creative_id must be non-empty")
+        if not campaign.creative_text.strip():
+            raise ValueError(f"{prefix}.creative_text must be non-empty")
+        if not campaign.topic.strip():
+            raise ValueError(f"{prefix}.topic must be non-empty")
         if campaign.campaign_id in seen_campaign_ids:
             raise ValueError(f"{prefix}.campaign_id must be unique")
         seen_campaign_ids.add(campaign.campaign_id)
@@ -453,7 +461,7 @@ def _validate_ad_campaigns(config: InstagramSocialDynamicsConfig) -> None:
             raise ValueError(f"{prefix}.advertiser_id must reference an existing user")
         if campaign.topic not in topics:
             raise ValueError(f"{prefix}.topic must be listed in topics")
-        if not -1.0 <= campaign.stance <= 1.0:
+        if not isfinite(campaign.stance) or not -1.0 <= campaign.stance <= 1.0:
             raise ValueError(f"{prefix}.stance must be between -1 and 1")
         if campaign.start_tick < 1:
             raise ValueError(f"{prefix}.start_tick must be at least 1")

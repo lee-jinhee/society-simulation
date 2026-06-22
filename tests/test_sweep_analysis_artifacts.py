@@ -251,6 +251,7 @@ def test_group_summary_json_contains_native_values_from_analysis_result(
         "failed",
         "groups",
         "toplines",
+        "ad_incrementality",
         "incomplete_runs",
     }
     assert payload["sweep_name"] == "network_topology_sweep"
@@ -339,8 +340,12 @@ def test_write_analysis_artifacts_reports_instagram_ad_metrics(
         "3.5000 | 1.5000 | 1.0000 | 0.3083 |"
     ) in report
     assert "## Ad Incrementality" in report
-    assert "| organic_post | 6.0000 | 2.0000 |" in report
-    assert "| sponsored_ad | 12.0000 | 7.0000 |" in report
+    assert (
+        "| condition | comparable_blocks | mean_total_reach_lift_vs_no_ad | "
+        "mean_engagement_lift_vs_no_ad |"
+    ) in report
+    assert "| organic_post | 1 | 6.0000 | 2.0000 |" in report
+    assert "| sponsored_ad | 1 | 14.0000 | 6.0000 |" in report
 
     with paths.group_summary_csv_path.open(newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
@@ -356,6 +361,20 @@ def test_write_analysis_artifacts_reports_instagram_ad_metrics(
     payload = json.loads(paths.group_summary_json_path.read_text(encoding="utf-8"))
     assert payload["groups"]["ad_condition"]["sponsored_ad"]["mean_unique_total_ad_reach"] == 12.0
     assert payload["toplines"]["highest_total_ad_reach"]["value"] == "sponsored_ad"
+    assert payload["ad_incrementality"] == [
+        {
+            "condition": "organic_post",
+            "comparable_blocks": 1,
+            "mean_engagement_lift_vs_no_ad": 2.0,
+            "mean_total_reach_lift_vs_no_ad": 6.0,
+        },
+        {
+            "condition": "sponsored_ad",
+            "comparable_blocks": 1,
+            "mean_engagement_lift_vs_no_ad": 6.0,
+            "mean_total_reach_lift_vs_no_ad": 14.0,
+        },
+    ]
 
 
 def test_failure_summary_csv_includes_failed_and_pending_rows_in_order(

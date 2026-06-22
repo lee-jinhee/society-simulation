@@ -173,6 +173,8 @@ def test_organic_campaign_post_is_hidden_before_start_tick() -> None:
 
     assert "ad-maple_3rd_opening" not in [item.post_id for item in before]
     assert "ad-maple_3rd_opening" in [item.post_id for item in during]
+    organic_item = next(item for item in during if item.post_id == "ad-maple_3rd_opening")
+    assert organic_item.reason.startswith("organic_spillover")
 
 
 def test_sponsored_ad_does_not_deliver_before_start_tick() -> None:

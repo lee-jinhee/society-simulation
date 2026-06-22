@@ -251,6 +251,22 @@ class ToplineEntry:
 
 
 @dataclass(frozen=True)
+class AdIncrementalitySummary:
+    condition: str
+    comparable_blocks: int
+    mean_total_reach_lift_vs_no_ad: float
+    mean_engagement_lift_vs_no_ad: float
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "condition": self.condition,
+            "comparable_blocks": self.comparable_blocks,
+            "mean_total_reach_lift_vs_no_ad": self.mean_total_reach_lift_vs_no_ad,
+            "mean_engagement_lift_vs_no_ad": self.mean_engagement_lift_vs_no_ad,
+        }
+
+
+@dataclass(frozen=True)
 class SweepAnalysisResult:
     sweep_name: str
     source_dir: Path
@@ -261,6 +277,7 @@ class SweepAnalysisResult:
     factor_names: tuple[str, ...]
     group_summaries: tuple[GroupSummary, ...]
     toplines: dict[str, ToplineEntry]
+    ad_incrementality: tuple[AdIncrementalitySummary, ...]
     incomplete_runs: tuple[IncompleteRun, ...]
 
 
@@ -291,6 +308,7 @@ def analyze_sweep(output_dir: str | Path) -> SweepAnalysisResult:
         factor_names=factor_names,
         group_summaries=tuple(group_summaries),
         toplines=_toplines(group_summaries),
+        ad_incrementality=_ad_incrementality_summaries(factor_names, rows),
         incomplete_runs=_incomplete_runs(rows),
     )
 
@@ -628,6 +646,92 @@ def _toplines(group_summaries: list[GroupSummary]) -> dict[str, ToplineEntry]:
     if ad_like_count is not None:
         toplines["highest_ad_like_count"] = ad_like_count
     return toplines
+
+
+def _ad_incrementality_summaries(
+    factor_names: tuple[str, ...],
+    rows: list[dict[str, str]],
+) -> tuple[AdIncrementalitySummary, ...]:
+    if "ad_condition" not in factor_names:
+        return ()
+    block_factor_names = tuple(name for name in factor_names if name != "ad_condition")
+    rows_by_block: dict[tuple[str, ...], list[dict[str, str]]] = {}
+    for row in rows:
+        if row["status"] != "completed":
+            continue
+        rows_by_block.setdefault(
+            tuple(row[name] for name in block_factor_names),
+            [],
+        ).append(row)
+
+    lifts_by_condition: dict[str, list[tuple[float, float]]] = {}
+    for block_rows in rows_by_block.values():
+        baseline_rows = [row for row in block_rows if row.get("ad_condition") == "no_ad"]
+        baseline_reach = _mean_row_metric(baseline_rows, "unique_total_ad_reach")
+        if baseline_reach is None:
+            continue
+        baseline_engagement = _mean_row_engagement(baseline_rows)
+        for condition in _condition_order(
+            {row.get("ad_condition", "") for row in block_rows}
+        ):
+            if condition == "no_ad":
+                continue
+            condition_rows = [row for row in block_rows if row.get("ad_condition") == condition]
+            reach = _mean_row_metric(condition_rows, "unique_total_ad_reach")
+            if reach is None:
+                continue
+            engagement = _mean_row_engagement(condition_rows)
+            lifts_by_condition.setdefault(condition, []).append(
+                (reach - baseline_reach, engagement - baseline_engagement)
+            )
+
+    return tuple(
+        AdIncrementalitySummary(
+            condition=condition,
+            comparable_blocks=len(lifts),
+            mean_total_reach_lift_vs_no_ad=sum(reach for reach, _ in lifts) / len(lifts),
+            mean_engagement_lift_vs_no_ad=sum(engagement for _, engagement in lifts)
+            / len(lifts),
+        )
+        for condition, lifts in (
+            (condition, lifts_by_condition[condition])
+            for condition in _condition_order(set(lifts_by_condition))
+        )
+        if lifts
+    )
+
+
+def _condition_order(conditions: set[str]) -> tuple[str, ...]:
+    preferred = ("organic_post", "sponsored_ad")
+    preferred_present = tuple(condition for condition in preferred if condition in conditions)
+    remaining = tuple(sorted(conditions - set(preferred) - {"", "no_ad"}))
+    return (*preferred_present, *remaining)
+
+
+def _mean_row_metric(rows: list[dict[str, str]], field: str) -> float | None:
+    values = [_parse_float(row.get(field)) for row in rows]
+    numeric_values = [value for value in values if value is not None]
+    if not numeric_values:
+        return None
+    return sum(numeric_values) / len(numeric_values)
+
+
+def _mean_row_engagement(rows: list[dict[str, str]]) -> float:
+    if not rows:
+        return 0.0
+    return sum(_row_engagement(row) for row in rows) / len(rows)
+
+
+def _row_engagement(row: dict[str, str]) -> float:
+    return sum(
+        _parse_float(row.get(field)) or 0.0
+        for field in (
+            "ad_like_count",
+            "advertiser_follow_count",
+            "ad_dm_count",
+            "ad_generated_post_count",
+        )
+    )
 
 
 def _highest_topline(

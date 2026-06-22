@@ -44,7 +44,11 @@ def build_feed(
             score=round(score, 6),
             rank=rank,
             source="following" if post.author_id in followed_ids else "explore",
-            reason=reason,
+            reason=(
+                f"organic_spillover {reason}"
+                if post.campaign_id is not None
+                else reason
+            ),
             visible_like_count=post.like_count,
             topic=post.topic,
             text=post.text,

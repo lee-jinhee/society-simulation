@@ -8,6 +8,7 @@ import re
 import pytest
 
 from society_simulation.sweep_analysis import (
+    AdIncrementalitySummary,
     GroupSummary,
     IncompleteRun,
     SweepAnalysisResult,
@@ -748,6 +749,12 @@ def write_manifest_entries(sweep_dir: Path, entries: list[dict[str, object]]) ->
 
 
 def test_sweep_analysis_dataclasses_match_task_api() -> None:
+    assert field_names(AdIncrementalitySummary) == (
+        "condition",
+        "comparable_blocks",
+        "mean_total_reach_lift_vs_no_ad",
+        "mean_engagement_lift_vs_no_ad",
+    )
     assert field_names(GroupSummary) == (
         "factor_name",
         "value",
@@ -811,6 +818,7 @@ def test_sweep_analysis_dataclasses_match_task_api() -> None:
         "factor_names",
         "group_summaries",
         "toplines",
+        "ad_incrementality",
         "incomplete_runs",
     )
 
@@ -937,6 +945,17 @@ def test_analyze_sweep_computes_instagram_ad_group_metrics_and_toplines(
     assert result.toplines["highest_total_ad_reach"].value == "sponsored_ad"
     assert result.toplines["highest_relevant_total_reach"].value == "interest_targeted"
     assert result.toplines["highest_ad_like_count"].value == "interest_targeted"
+    assert [row.condition for row in result.ad_incrementality] == [
+        "organic_post",
+        "sponsored_ad",
+    ]
+    organic, sponsored = result.ad_incrementality
+    assert organic.comparable_blocks == 1
+    assert organic.mean_total_reach_lift_vs_no_ad == pytest.approx(6.0)
+    assert organic.mean_engagement_lift_vs_no_ad == pytest.approx(2.0)
+    assert sponsored.comparable_blocks == 1
+    assert sponsored.mean_total_reach_lift_vs_no_ad == pytest.approx(14.0)
+    assert sponsored.mean_engagement_lift_vs_no_ad == pytest.approx(6.0)
 
 
 def test_analyze_sweep_rejects_missing_required_file(tmp_path: Path) -> None:

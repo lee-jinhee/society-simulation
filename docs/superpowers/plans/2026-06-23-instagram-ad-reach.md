@@ -489,17 +489,15 @@ Run:
 
 ```bash
 PYTHONPATH=src ./.venv/bin/python -m pytest -q
-PYTHONPATH=src ./.venv/bin/python -m society_simulation.sweep_cli run \
-  --config experiments/instagram_local_coffee_ad_reach_sweep.json \
-  --output-dir outputs/instagram_local_coffee_ad_reach_mock
-PYTHONPATH=src ./.venv/bin/python -m society_simulation.sweep_cli analyze \
-  --input-dir outputs/instagram_local_coffee_ad_reach_mock \
-  --output-dir outputs/instagram_local_coffee_ad_reach_mock/analysis
+PYTHONPATH=src ./.venv/bin/python -m society_simulation sweep \
+  experiments/instagram_local_coffee_ad_reach_sweep.json
+PYTHONPATH=src ./.venv/bin/python -m society_simulation analyze \
+  runs/sweeps/instagram_local_coffee_ad_reach_sweep
 ```
 
 Then inspect:
 
-- `outputs/instagram_local_coffee_ad_reach_mock/analysis/report.md`
+- `runs/sweeps/instagram_local_coffee_ad_reach_sweep/analysis/report.md`
 - representative `ad_impressions.jsonl`
 - representative replay `feed_impressions.jsonl`
 - aggregate CSV rows for campaign metrics.

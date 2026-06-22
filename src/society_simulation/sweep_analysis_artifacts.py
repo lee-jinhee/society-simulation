@@ -386,6 +386,9 @@ def _write_group_summary_json(path: Path, result: SweepAnalysisResult) -> None:
             name: topline.to_dict()
             for name, topline in result.toplines.items()
         },
+        "ad_incrementality": [
+            summary.to_dict() for summary in result.ad_incrementality
+        ],
         "incomplete_runs": [run.to_dict() for run in result.incomplete_runs],
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -442,50 +445,29 @@ def _has_network_report_metrics(result: SweepAnalysisResult) -> bool:
 
 
 def _ad_incrementality_lines(result: SweepAnalysisResult) -> list[str]:
-    condition_groups = {
-        group.value: group
-        for group in result.group_summaries
-        if group.factor_name == "ad_condition"
-    }
-    baseline = condition_groups.get("no_ad")
-    if baseline is None or baseline.mean_unique_total_ad_reach is None:
+    if not result.ad_incrementality:
         return []
-    baseline_reach = baseline.mean_unique_total_ad_reach
-    baseline_engagement = _ad_engagement(baseline)
     lines = [
-        "| condition | total_reach_lift_vs_no_ad | engagement_lift_vs_no_ad |",
-        "| --- | ---: | ---: |",
+        (
+            "| condition | comparable_blocks | mean_total_reach_lift_vs_no_ad | "
+            "mean_engagement_lift_vs_no_ad |"
+        ),
+        "| --- | ---: | ---: | ---: |",
     ]
-    for condition in ("organic_post", "sponsored_ad"):
-        group = condition_groups.get(condition)
-        if group is None or group.mean_unique_total_ad_reach is None:
-            continue
-        reach_lift = group.mean_unique_total_ad_reach - baseline_reach
-        engagement_lift = _ad_engagement(group) - baseline_engagement
+    for summary in result.ad_incrementality:
         lines.append(
             "| "
             + " | ".join(
                 [
-                    _markdown_cell(condition),
-                    _format_numeric(reach_lift),
-                    _format_numeric(engagement_lift),
+                    _markdown_cell(summary.condition),
+                    str(summary.comparable_blocks),
+                    _format_numeric(summary.mean_total_reach_lift_vs_no_ad),
+                    _format_numeric(summary.mean_engagement_lift_vs_no_ad),
                 ]
             )
             + " |"
         )
     return lines
-
-
-def _ad_engagement(group) -> float:
-    return sum(
-        value or 0.0
-        for value in (
-            group.mean_ad_like_count,
-            group.mean_advertiser_follow_count,
-            group.mean_ad_dm_count,
-            group.mean_ad_generated_post_count,
-        )
-    )
 
 
 def _markdown_separator(columns: int) -> str:
