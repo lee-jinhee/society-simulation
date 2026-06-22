@@ -90,6 +90,11 @@ class EventReplayWriter:
             f"- final_perceived_majority_error: `{metrics.get('final_perceived_majority_error')}`",
             f"- final_mean_fairness_concern: `{metrics.get('final_mean_fairness_concern')}`",
             f"- final_mean_trust_in_official_info: `{metrics.get('final_mean_trust_in_official_info')}`",
+            f"- final_speech_action_counts: `{metrics.get('final_speech_action_counts')}`",
+            f"- final_public_post_rate: `{metrics.get('final_public_post_rate')}`",
+            f"- final_private_message_rate: `{metrics.get('final_private_message_rate')}`",
+            f"- final_read_only_rate: `{metrics.get('final_read_only_rate')}`",
+            f"- final_avoid_discussion_rate: `{metrics.get('final_avoid_discussion_rate')}`",
         ]
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

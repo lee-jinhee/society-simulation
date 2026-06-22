@@ -13,6 +13,7 @@ from society_simulation.event_models import (
     EventAgentState,
     EventExposure,
     EventMessage,
+    validate_speech_action,
 )
 from society_simulation.llm_policy import (
     JSONTransport,
@@ -38,6 +39,7 @@ _REQUIRED_DECISION_FIELDS = (
     "perceived_majority",
     "fairness_concern",
     "trust_in_official_info",
+    "speech_action",
     "emotion",
     "silence_reason",
     "private_reasoning",
@@ -98,6 +100,7 @@ def parse_event_decision_content(
         perceived_majority=data["perceived_majority"],
         fairness_concern=data["fairness_concern"],
         trust_in_official_info=data["trust_in_official_info"],
+        speech_action=validate_speech_action(data["speech_action"]),
         emotion=_require_non_empty_str(data["emotion"], "emotion"),
         silence_reason=_require_non_empty_str(data["silence_reason"], "silence_reason"),
         memory_summary=_require_non_empty_str(data["memory_update"], "memory_update"),
@@ -215,6 +218,7 @@ class MockPersonaPolicy:
             )
         willingness_to_speak = 0.7 if messages else 0.2
         fairness_concern = 0.6 if delta < 0 else 0.35
+        speech_action = "public_post" if messages else "read_only"
         silence_reason = "not_silent" if messages else "Not enough new information to post."
 
         return json.dumps(
@@ -227,6 +231,7 @@ class MockPersonaPolicy:
                 "perceived_majority": public_stance,
                 "fairness_concern": fairness_concern,
                 "trust_in_official_info": profile.political_trust,
+                "speech_action": speech_action,
                 "emotion": "conflicted" if exposures else current_state.emotion,
                 "silence_reason": silence_reason,
                 "private_reasoning": _mock_private_reasoning(delta, exposures),
@@ -485,8 +490,10 @@ def _event_user_message(
         "private view, public posture, and willingness to speak change.\n"
         "Return only JSON with keys private_stance, public_stance, confidence, salience, "
         "willingness_to_speak, perceived_majority, fairness_concern, "
-        "trust_in_official_info, emotion, silence_reason, private_reasoning, "
+        "trust_in_official_info, speech_action, emotion, silence_reason, private_reasoning, "
         "messages, and memory_update.\n"
+        "First choose speech_action as public_post, private_message, read_only, or avoid_discussion. "
+        "Only write a message if speech_action is public_post or private_message.\n"
         "willingness_to_speak, fairness_concern, and trust_in_official_info must be "
         "numbers from 0 to 1. perceived_majority must be a stance estimate from -1 to 1.\n"
         "silence_reason should briefly say why you did not post; use not_silent if you post.\n"
@@ -558,6 +565,7 @@ def _event_audit_record(
         "parsed_perceived_majority": state.perceived_majority,
         "parsed_fairness_concern": state.fairness_concern,
         "parsed_trust_in_official_info": state.trust_in_official_info,
+        "parsed_speech_action": state.speech_action,
         "parsed_emotion": state.emotion,
         "parsed_silence_reason": state.silence_reason,
         "parsed_memory_summary": state.memory_summary,

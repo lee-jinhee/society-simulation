@@ -89,6 +89,8 @@ def _run_single_config(parser: argparse.ArgumentParser, config_path: str) -> int
             print(f"final_public_expression_bias={metrics['final_public_expression_bias']}")
         if "final_perceived_majority_error" in metrics:
             print(f"final_perceived_majority_error={metrics['final_perceived_majority_error']}")
+        if "final_speech_action_counts" in metrics:
+            print(f"final_speech_action_counts={metrics['final_speech_action_counts']}")
         print(f"message_count={metrics.get('message_count')}")
     else:
         print(f"action_counts={action_counts}")

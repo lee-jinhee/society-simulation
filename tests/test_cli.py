@@ -237,7 +237,7 @@ def test_cli_runs_event_driven_opinion_config_and_prints_event_summary(
     assert "final_public_stance_mean=" in output
     assert "final_private_public_gap=" in output
     assert "message_count=" in output
-    assert "action_counts=" not in output
+    assert "\naction_counts=" not in output
     assert "llm_calls=" in output
     assert f"output_dir={output_dir}" in output
     assert (output_dir / "summary.md").exists()

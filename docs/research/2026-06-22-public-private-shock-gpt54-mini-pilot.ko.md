@@ -171,18 +171,21 @@ side-conversation, fatigue, asymmetric participation이 있다.
 
 ## 다음 실험
 
-다음 구현은 message generation 전에 speech-decision layer를 추가해야 한다.
+후속 구현에서 message generation 전에 speech-decision layer를 추가했다. 이제 각
+agent는 네 가지 speech action 중 하나를 먼저 선택한다.
 
-1. Agent가 먼저 publicly post, privately message, only read, avoid discussion 중
-   무엇을 할지 결정한다.
-2. Public posting은 willingness to speak, conflict sensitivity, perceived majority,
-   confidence, 새로 말할 내용이 있는지에 의존해야 한다.
-3. Repetitive message는 prompt에서 억제하거나 deterministic repetition check로
-   필터링해야 한다.
-4. Metrics는 public silence, private DM, passive reading을 구분해야 한다.
+1. `public_post`;
+2. `private_message`;
+3. `read_only`;
+4. `avoid_discussion`.
 
-다음 paid run은 많은 agent가 공개 게시를 멈추는 조건에서도 legitimacy-residue
-pattern이 유지되는지 테스트해야 한다.
+Runner는 generated message가 선택된 action과 일치하는지 검증하고, metrics는
+speech-action count와 rate를 보고한다. 따라서 다음 paid run에서는 많은 agent가
+공개 게시를 멈추는 조건에서도 legitimacy-residue pattern이 유지되는지 직접 테스트할
+수 있다.
+
+다음 paid run은 같은 public-private shock scenario를 새 speech-decision contract와
+새 cost cap으로 실행해야 한다.
 
 ## Artifacts
 

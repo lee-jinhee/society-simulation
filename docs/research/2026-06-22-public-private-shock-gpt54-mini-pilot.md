@@ -172,20 +172,21 @@ side-conversations, fatigue, and asymmetric participation.
 
 ## Next Experiment
 
-The next implementation should add a speech-decision layer before message
-generation:
+Follow-up implementation added a speech-decision layer before message
+generation. Each agent now chooses one of four speech actions:
 
-1. The agent first decides whether they would publicly post, privately message,
-   only read, or avoid the discussion.
-2. Public posting should depend on willingness to speak, conflict sensitivity,
-   perceived majority, confidence, and whether the agent has anything new to
-   say.
-3. Repetitive messages should be penalized in the prompt or filtered by a
-   deterministic repetition check.
-4. Metrics should distinguish public silence, private DM, and passive reading.
+1. `public_post`;
+2. `private_message`;
+3. `read_only`;
+4. `avoid_discussion`.
 
-The next paid run should test whether the legitimacy-residue pattern persists
-when many agents stop publicly posting.
+The runner validates that generated messages match the selected action, and the
+metrics now report speech-action counts and rates. This means the next paid run
+can directly test whether the legitimacy-residue pattern persists when many
+agents stop publicly posting.
+
+The next paid run should use the same public-private shock scenario with the new
+speech-decision contract and a fresh cost cap.
 
 ## Artifacts
 

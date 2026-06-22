@@ -126,6 +126,7 @@ def run_event_driven_opinion_dynamics(config: EventDrivenOpinionConfig) -> Event
                     profile_agent_id=profile.agent_id,
                     day=day,
                 )
+                _validate_speech_action_messages(decision.state, decision.messages)
                 next_states.append(decision.state)
                 all_messages.extend(decision.messages)
                 if memory_enabled:
@@ -227,6 +228,25 @@ def _validate_generated_state(
         raise ValueError("generated state agent_id must match profile")
     if state.day != day:
         raise ValueError("generated state day must match simulation day")
+
+
+def _validate_speech_action_messages(
+    state: EventAgentState,
+    messages: tuple[EventMessage, ...],
+) -> None:
+    if state.speech_action == "public_post":
+        if len(messages) != 1 or messages[0].recipient_agent_id is not None:
+            raise ValueError("public_post speech_action requires one public message")
+        return
+    if state.speech_action == "private_message":
+        if len(messages) != 1 or messages[0].recipient_agent_id is None:
+            raise ValueError("private_message speech_action requires one private message")
+        return
+    if state.speech_action in {"read_only", "avoid_discussion"}:
+        if messages:
+            raise ValueError(f"{state.speech_action} speech_action must not include messages")
+        return
+    raise ValueError(f"unsupported speech_action: {state.speech_action}")
 
 
 def _write_partial_replay(

@@ -19,6 +19,7 @@ def state(
     perceived_majority: float = 0.0,
     fairness: float = 0.3,
     official_trust: float = 0.5,
+    speech_action: str = "read_only",
     silence_reason: str = "not_silent",
 ) -> EventAgentState:
     return EventAgentState(
@@ -32,6 +33,7 @@ def state(
         perceived_majority=perceived_majority,
         fairness_concern=fairness,
         trust_in_official_info=official_trust,
+        speech_action=speech_action,
         emotion=emotion,
         silence_reason=silence_reason,
         memory_summary="memory",
@@ -55,6 +57,7 @@ def test_compute_event_timeseries_tracks_private_public_gap_and_messages() -> No
                 perceived_majority=0.4,
                 fairness=0.9,
                 official_trust=0.25,
+                speech_action="read_only",
                 silence_reason="I do not want to pile on publicly.",
             ),
             state(
@@ -69,6 +72,7 @@ def test_compute_event_timeseries_tracks_private_public_gap_and_messages() -> No
                 perceived_majority=0.2,
                 fairness=0.4,
                 official_trust=0.7,
+                speech_action="public_post",
             ),
         ),
     )
@@ -107,6 +111,7 @@ def test_compute_event_timeseries_tracks_private_public_gap_and_messages() -> No
     assert rows[1]["mean_fairness_concern"] == pytest.approx(0.65)
     assert rows[1]["mean_trust_in_official_info"] == pytest.approx(0.475)
     assert rows[1]["public_expression_bias"] == pytest.approx(0.05)
+    assert rows[1]["speech_action_counts"] == {"public_post": 1, "read_only": 1}
     assert rows[1]["message_count"] == 2
     assert rows[1]["private_message_count"] == 1
     assert rows[1]["public_message_count"] == 1
@@ -128,6 +133,7 @@ def test_compute_event_metrics_uses_final_day() -> None:
                 perceived_majority=0.1,
                 fairness=0.7,
                 official_trust=0.2,
+                speech_action="private_message",
                 silence_reason="I would wait before posting.",
             ),
         ),
@@ -162,6 +168,11 @@ def test_compute_event_metrics_uses_final_day() -> None:
     assert metrics["final_mean_fairness_concern"] == pytest.approx(0.7)
     assert metrics["final_mean_trust_in_official_info"] == pytest.approx(0.2)
     assert metrics["final_public_expression_bias"] == pytest.approx(-0.25)
+    assert metrics["final_speech_action_counts"] == {"private_message": 1}
+    assert metrics["final_public_post_rate"] == pytest.approx(0.0)
+    assert metrics["final_private_message_rate"] == pytest.approx(1.0)
+    assert metrics["final_read_only_rate"] == pytest.approx(0.0)
+    assert metrics["final_avoid_discussion_rate"] == pytest.approx(0.0)
     assert metrics["timeseries"][-1]["message_count"] == 1
 
 

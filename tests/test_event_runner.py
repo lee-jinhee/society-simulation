@@ -104,7 +104,9 @@ def test_event_runner_marks_private_dm_exposure_memories_private(
         def decide(self, profile, current_state, exposures, *, day):  # type: ignore[no-untyped-def]
             del exposures
             message = ()
+            speech_action = "read_only"
             if profile.agent_id == "jisoo" and day == 1:
+                speech_action = "private_message"
                 message = (
                     EventMessage(
                         day=day,
@@ -115,7 +117,7 @@ def test_event_runner_marks_private_dm_exposure_memories_private(
                     ),
                 )
             return EventPolicyDecision(
-                state=_copy_state(current_state, day=day),
+                state=_copy_state(current_state, day=day, speech_action=speech_action),
                 messages=message,
             )
 
@@ -214,6 +216,7 @@ def _copy_state(
     *,
     agent_id: str | None = None,
     day: int | None = None,
+    speech_action: str | None = None,
 ) -> EventAgentState:
     return EventAgentState(
         agent_id=current_state.agent_id if agent_id is None else agent_id,
@@ -226,6 +229,7 @@ def _copy_state(
         perceived_majority=current_state.perceived_majority,
         fairness_concern=current_state.fairness_concern,
         trust_in_official_info=current_state.trust_in_official_info,
+        speech_action=current_state.speech_action if speech_action is None else speech_action,
         emotion=current_state.emotion,
         silence_reason=current_state.silence_reason,
         memory_summary=current_state.memory_summary,
@@ -307,7 +311,7 @@ def test_event_runner_rejects_generated_message_for_wrong_day(
         def decide(self, profile, current_state, exposures, *, day):  # type: ignore[no-untyped-def]
             del profile, exposures
             return EventPolicyDecision(
-                state=_copy_state(current_state, day=day),
+                state=_copy_state(current_state, day=day, speech_action="public_post"),
                 messages=(
                     EventMessage(
                         day=day + 1,
@@ -335,7 +339,12 @@ def test_event_runner_rejects_generated_message_for_unknown_channel(
         def decide(self, profile, current_state, exposures, *, day):  # type: ignore[no-untyped-def]
             del exposures
             return EventPolicyDecision(
-                state=_copy_state(current_state, agent_id=profile.agent_id, day=day),
+                state=_copy_state(
+                    current_state,
+                    agent_id=profile.agent_id,
+                    day=day,
+                    speech_action="public_post",
+                ),
                 messages=(
                     EventMessage(
                         day=day,
@@ -361,7 +370,7 @@ def test_event_runner_rejects_generated_message_for_wrong_sender(
         def decide(self, profile, current_state, exposures, *, day):  # type: ignore[no-untyped-def]
             del profile, exposures
             return EventPolicyDecision(
-                state=_copy_state(current_state, day=day),
+                state=_copy_state(current_state, day=day, speech_action="public_post"),
                 messages=(
                     EventMessage(
                         day=day,
@@ -377,6 +386,136 @@ def test_event_runner_rejects_generated_message_for_wrong_sender(
 
     with pytest.raises(ValueError, match="generated message sender_agent_id must match profile"):
         run_experiment(EventDrivenOpinionConfig.from_dict(valid_event_config(tmp_path)))
+
+
+def test_event_runner_rejects_public_post_without_message(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = valid_event_config(tmp_path)
+    data["days"] = 1
+    data["output_dir"] = str(tmp_path / "public-post-without-message")
+
+    class PublicPostWithoutMessagePolicy:
+        def decide(self, profile, current_state, exposures, *, day):  # type: ignore[no-untyped-def]
+            del profile, exposures
+            return EventPolicyDecision(
+                state=_copy_state(current_state, day=day, speech_action="public_post"),
+                messages=(),
+            )
+
+    monkeypatch.setattr(
+        event_runner,
+        "_build_event_policy",
+        lambda config: PublicPostWithoutMessagePolicy(),
+    )
+
+    with pytest.raises(ValueError, match="public_post speech_action requires one public message"):
+        run_experiment(EventDrivenOpinionConfig.from_dict(data))
+
+
+def test_event_runner_rejects_public_post_with_private_recipient(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = valid_event_config(tmp_path)
+    data["days"] = 1
+    data["output_dir"] = str(tmp_path / "public-post-private-recipient")
+
+    class PublicPostWithPrivateRecipientPolicy:
+        def decide(self, profile, current_state, exposures, *, day):  # type: ignore[no-untyped-def]
+            del exposures
+            return EventPolicyDecision(
+                state=_copy_state(current_state, day=day, speech_action="public_post"),
+                messages=(
+                    EventMessage(
+                        day=day,
+                        sender_agent_id=profile.agent_id,
+                        channel="neighborhood_group_chat",
+                        recipient_agent_id="minho",
+                        text="This should be public if speech_action is public_post.",
+                    ),
+                ),
+            )
+
+    monkeypatch.setattr(
+        event_runner,
+        "_build_event_policy",
+        lambda config: PublicPostWithPrivateRecipientPolicy(),
+    )
+
+    with pytest.raises(ValueError, match="public_post speech_action requires one public message"):
+        run_experiment(EventDrivenOpinionConfig.from_dict(data))
+
+
+def test_event_runner_rejects_private_message_with_public_recipient(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = valid_event_config(tmp_path)
+    data["days"] = 1
+    data["output_dir"] = str(tmp_path / "private-message-public-recipient")
+
+    class PrivateMessageWithPublicRecipientPolicy:
+        def decide(self, profile, current_state, exposures, *, day):  # type: ignore[no-untyped-def]
+            del exposures
+            return EventPolicyDecision(
+                state=_copy_state(current_state, day=day, speech_action="private_message"),
+                messages=(
+                    EventMessage(
+                        day=day,
+                        sender_agent_id=profile.agent_id,
+                        channel="neighborhood_group_chat",
+                        recipient_agent_id=None,
+                        text="This should be private if speech_action is private_message.",
+                    ),
+                ),
+            )
+
+    monkeypatch.setattr(
+        event_runner,
+        "_build_event_policy",
+        lambda config: PrivateMessageWithPublicRecipientPolicy(),
+    )
+
+    with pytest.raises(ValueError, match="private_message speech_action requires one private message"):
+        run_experiment(EventDrivenOpinionConfig.from_dict(data))
+
+
+@pytest.mark.parametrize("speech_action", ["read_only", "avoid_discussion"])
+def test_event_runner_rejects_silent_speech_action_with_message(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    speech_action: str,
+) -> None:
+    data = valid_event_config(tmp_path)
+    data["days"] = 1
+    data["output_dir"] = str(tmp_path / f"{speech_action}-with-message")
+
+    class SilentActionWithMessagePolicy:
+        def decide(self, profile, current_state, exposures, *, day):  # type: ignore[no-untyped-def]
+            del exposures
+            return EventPolicyDecision(
+                state=_copy_state(current_state, day=day, speech_action=speech_action),
+                messages=(
+                    EventMessage(
+                        day=day,
+                        sender_agent_id=profile.agent_id,
+                        channel="neighborhood_group_chat",
+                        recipient_agent_id=None,
+                        text="This should not exist for a silent speech action.",
+                    ),
+                ),
+            )
+
+    monkeypatch.setattr(
+        event_runner,
+        "_build_event_policy",
+        lambda config: SilentActionWithMessagePolicy(),
+    )
+
+    with pytest.raises(ValueError, match=f"{speech_action} speech_action must not include messages"):
+        run_experiment(EventDrivenOpinionConfig.from_dict(data))
 
 
 def test_event_runner_persists_partial_replay_with_audited_error(

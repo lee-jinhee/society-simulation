@@ -5,6 +5,15 @@ from dataclasses import asdict, dataclass, field as dataclass_field
 from math import isfinite
 from types import MappingProxyType
 
+SPEECH_ACTIONS = frozenset(
+    {
+        "public_post",
+        "private_message",
+        "read_only",
+        "avoid_discussion",
+    }
+)
+
 
 def validate_probability(value: object, field: str) -> float:
     message = f"{field} must be a number between 0 and 1"
@@ -48,6 +57,14 @@ def _require_non_empty_str(value: object, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string")
     return value
+
+
+def validate_speech_action(value: object) -> str:
+    action = _require_non_empty_str(value, "speech_action")
+    if action not in SPEECH_ACTIONS:
+        allowed = ", ".join(sorted(SPEECH_ACTIONS))
+        raise ValueError(f"unsupported speech_action: {action}; expected one of {allowed}")
+    return action
 
 
 def _require_int(value: object, field_name: str) -> int:
@@ -112,6 +129,7 @@ class EventAgentState:
     perceived_majority: float
     fairness_concern: float
     trust_in_official_info: float
+    speech_action: str
     emotion: str
     silence_reason: str
     memory_summary: str
@@ -152,6 +170,7 @@ class EventAgentState:
             "trust_in_official_info",
             validate_probability(self.trust_in_official_info, "trust_in_official_info"),
         )
+        object.__setattr__(self, "speech_action", validate_speech_action(self.speech_action))
         object.__setattr__(self, "emotion", _require_non_empty_str(self.emotion, "emotion"))
         object.__setattr__(
             self,
@@ -322,6 +341,7 @@ class EventAgentProfile:
             perceived_majority=0.0,
             fairness_concern=0.3,
             trust_in_official_info=self.political_trust,
+            speech_action="read_only",
             emotion="calm",
             silence_reason="not_silent",
             memory_summary=f"{self.name} starts with their existing perspective.",

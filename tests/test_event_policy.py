@@ -61,6 +61,7 @@ def decision_payload(**overrides: object) -> dict[str, object]:
         "perceived_majority": -0.15,
         "fairness_concern": 0.8,
         "trust_in_official_info": 0.35,
+        "speech_action": "read_only",
         "emotion": "conflicted",
         "silence_reason": "I am not sure the group wants to hear another complaint.",
         "private_reasoning": "The announcement is plausible but costly.",
@@ -87,6 +88,7 @@ def test_parse_event_decision_content_requires_complete_json() -> None:
                 perceived_majority=0.35,
                 fairness_concern=0.62,
                 trust_in_official_info=0.5,
+                speech_action="public_post",
                 silence_reason="not_silent",
                 private_reasoning="The policy helps traffic but adds costs.",
                 messages=[
@@ -106,6 +108,7 @@ def test_parse_event_decision_content_requires_complete_json() -> None:
     assert decision.state.perceived_majority == 0.35
     assert decision.state.fairness_concern == 0.62
     assert decision.state.trust_in_official_info == 0.5
+    assert decision.state.speech_action == "public_post"
     assert decision.state.silence_reason == "not_silent"
     assert decision.messages[0].text == "I can see both sides here."
 
@@ -220,6 +223,7 @@ def test_openai_compatible_persona_policy_sends_human_role_prompt_without_experi
     assert audit_records[0]["parsed_perceived_majority"] == -0.15
     assert audit_records[0]["parsed_fairness_concern"] == 0.8
     assert audit_records[0]["parsed_trust_in_official_info"] == 0.35
+    assert audit_records[0]["parsed_speech_action"] == "read_only"
     assert audit_records[0]["parsed_silence_reason"]
     assert "secret-key" not in json.dumps(audit_records, sort_keys=True)
 
@@ -264,6 +268,8 @@ def test_openai_compatible_persona_policy_includes_message_constraints() -> None
     assert "At most one message" in prompt_text
     assert "zero messages is allowed" in prompt_text
     assert "willingness_to_speak" in prompt_text
+    assert "speech_action" in prompt_text
+    assert "public_post, private_message, read_only, or avoid_discussion" in prompt_text
     assert "perceived_majority" in prompt_text
     assert "fairness_concern" in prompt_text
     assert "trust_in_official_info" in prompt_text

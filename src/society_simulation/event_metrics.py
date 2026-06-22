@@ -60,6 +60,9 @@ def compute_event_timeseries(
                     state.trust_in_official_info for state in states
                 ),
                 "public_expression_bias": mean_public_stance - mean_private_stance,
+                "speech_action_counts": dict(
+                    sorted(Counter(state.speech_action for state in states).items())
+                ),
                 "message_count": len(day_messages),
                 "private_message_count": sum(
                     1 for message in day_messages if message.recipient_agent_id is not None
@@ -120,6 +123,11 @@ def compute_event_metrics(
         "final_mean_fairness_concern": final["mean_fairness_concern"],
         "final_mean_trust_in_official_info": final["mean_trust_in_official_info"],
         "final_public_expression_bias": final["public_expression_bias"],
+        "final_speech_action_counts": final["speech_action_counts"],
+        "final_public_post_rate": _speech_action_rate(final, "public_post"),
+        "final_private_message_rate": _speech_action_rate(final, "private_message"),
+        "final_read_only_rate": _speech_action_rate(final, "read_only"),
+        "final_avoid_discussion_rate": _speech_action_rate(final, "avoid_discussion"),
         "timeseries": rows,
     }
 
@@ -129,6 +137,19 @@ def _retrieved_items(row: dict[str, Any]) -> tuple[dict[str, Any], ...]:
     if not isinstance(retrieved, (list, tuple)):
         return ()
     return tuple(item for item in retrieved if isinstance(item, dict))
+
+
+def _speech_action_rate(row: dict[str, Any], action: str) -> float:
+    counts = row.get("speech_action_counts")
+    if not isinstance(counts, dict):
+        return 0.0
+    total = sum(value for value in counts.values() if isinstance(value, int))
+    if total == 0:
+        return 0.0
+    count = counts.get(action, 0)
+    if not isinstance(count, int):
+        return 0.0
+    return count / total
 
 
 def _retrieval_kind_counts(retrievals: tuple[dict[str, Any], ...]) -> dict[str, int]:

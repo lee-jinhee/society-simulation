@@ -54,6 +54,7 @@ def _valid_agent_state_kwargs() -> dict[str, object]:
         "perceived_majority": -0.1,
         "fairness_concern": 0.73,
         "trust_in_official_info": 0.38,
+        "speech_action": "read_only",
         "emotion": "worried",
         "silence_reason": "Waiting to see whether exemptions are real.",
         "memory_summary": "Jisoo is worried about commute costs.",
@@ -154,6 +155,7 @@ def test_agent_state_rejects_invalid_stance_and_probability_fields(
     [
         ("agent_id", "agent_id must be a non-empty string"),
         ("emotion", "emotion must be a non-empty string"),
+        ("speech_action", "speech_action must be a non-empty string"),
         ("silence_reason", "silence_reason must be a non-empty string"),
         ("memory_summary", "memory_summary must be a non-empty string"),
         ("last_private_reasoning", "last_private_reasoning must be a non-empty string"),
@@ -164,6 +166,14 @@ def test_agent_state_rejects_empty_strings(field: str, message: str) -> None:
     state_kwargs[field] = ""
 
     with pytest.raises(ValueError, match=message):
+        EventAgentState(**state_kwargs)  # type: ignore[arg-type]
+
+
+def test_agent_state_rejects_unsupported_speech_action() -> None:
+    state_kwargs = _valid_agent_state_kwargs()
+    state_kwargs["speech_action"] = "daily_forum_reply"
+
+    with pytest.raises(ValueError, match="unsupported speech_action"):
         EventAgentState(**state_kwargs)  # type: ignore[arg-type]
 
 
