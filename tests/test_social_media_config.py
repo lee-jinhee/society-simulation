@@ -3,7 +3,7 @@ import json
 import pytest
 
 from society_simulation.config import load_config
-from society_simulation.social_media_config import InstagramSocialDynamicsConfig
+from society_simulation.social_media_config import AdCampaignConfig, InstagramSocialDynamicsConfig
 
 
 def valid_social_media_config() -> dict[str, object]:
@@ -58,6 +58,7 @@ def test_load_instagram_social_config(tmp_path) -> None:
     assert config.experiment_name == "instagram_social_dynamics"
     assert config.feed_policy["type"] == "engagement_ranked"
     assert config.seed_posts == ()
+    assert config.ad_campaigns == ()
 
 
 def test_reject_invalid_feed_policy_type() -> None:
@@ -130,6 +131,95 @@ def test_reject_invalid_seed_posts(mutation, message: str) -> None:
     }
     mutation(post)
     data["seed_posts"] = [post]
+
+    config = InstagramSocialDynamicsConfig.from_dict(data)
+    with pytest.raises(ValueError, match=message):
+        config.validate()
+
+
+def _campaign(**overrides: object) -> dict[str, object]:
+    campaign = {
+        "campaign_id": "maple_3rd_opening",
+        "advertiser_id": 0,
+        "ad_condition": "sponsored_ad",
+        "creative_id": "discount_offer",
+        "creative_text": "First 100 visitors get a free pastry with any drink.",
+        "topic": "transit",
+        "stance": 0.2,
+        "start_tick": 2,
+        "end_tick": 4,
+        "budget_impressions": 8,
+        "frequency_cap": 2,
+        "targeting": "interest_targeted",
+        "sponsored_like_count": 25,
+        "targeting_topics": ["transit"],
+    }
+    campaign.update(overrides)
+    return campaign
+
+
+def test_accept_ad_campaign_config_and_round_trip() -> None:
+    data = valid_social_media_config()
+    data["ad_campaigns"] = [_campaign()]
+
+    config = InstagramSocialDynamicsConfig.from_dict(data)
+    config.validate()
+
+    assert config.ad_campaigns == (
+        AdCampaignConfig(
+            campaign_id="maple_3rd_opening",
+            advertiser_id=0,
+            ad_condition="sponsored_ad",
+            creative_id="discount_offer",
+            creative_text="First 100 visitors get a free pastry with any drink.",
+            topic="transit",
+            stance=0.2,
+            start_tick=2,
+            end_tick=4,
+            budget_impressions=8,
+            frequency_cap=2,
+            targeting="interest_targeted",
+            sponsored_like_count=25,
+            targeting_topics=("transit",),
+        ),
+    )
+    assert config.to_dict()["ad_campaigns"] == data["ad_campaigns"]
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (
+            lambda campaign: campaign.update({"ad_condition": "magic"}),
+            "unsupported ad_campaigns\\[0\\].ad_condition",
+        ),
+        (
+            lambda campaign: campaign.update({"targeting": "magic"}),
+            "unsupported ad_campaigns\\[0\\].targeting",
+        ),
+        (
+            lambda campaign: campaign.update({"advertiser_id": 99}),
+            "ad_campaigns\\[0\\].advertiser_id must reference an existing user",
+        ),
+        (
+            lambda campaign: campaign.update({"topic": "coffee"}),
+            "ad_campaigns\\[0\\].topic must be listed in topics",
+        ),
+        (
+            lambda campaign: campaign.update({"budget_impressions": 0}),
+            "ad_campaigns\\[0\\].budget_impressions must be positive for sponsored_ad",
+        ),
+        (
+            lambda campaign: campaign.update({"frequency_cap": 0}),
+            "ad_campaigns\\[0\\].frequency_cap must be positive for sponsored_ad",
+        ),
+    ],
+)
+def test_reject_invalid_ad_campaigns(mutation, message: str) -> None:
+    data = valid_social_media_config()
+    campaign = _campaign()
+    mutation(campaign)
+    data["ad_campaigns"] = [campaign]
 
     config = InstagramSocialDynamicsConfig.from_dict(data)
     with pytest.raises(ValueError, match=message):

@@ -6,6 +6,11 @@ from pathlib import Path
 import random
 from typing import Any
 
+from society_simulation.social_media_ads import (
+    AdImpression,
+    initialize_ad_delivery,
+    insert_sponsored_ads,
+)
 from society_simulation.social_media_config import InstagramSocialDynamicsConfig
 from society_simulation.social_media_feed import build_feed
 from society_simulation.social_media_metrics import compute_social_media_metrics
@@ -32,6 +37,7 @@ class SocialMediaRunResult:
     actions: tuple[PlatformAction, ...]
     dm_messages: tuple[DirectMessage, ...]
     states_by_tick: tuple[tuple[SocialMediaUserState, ...], ...]
+    ad_impressions: tuple[AdImpression, ...]
     metrics: dict[str, Any]
     output_dir: Path
 
@@ -43,6 +49,7 @@ def run_instagram_social_dynamics(
     rng = random.Random(config.seed)
     policy = _build_policy(config)
     world = build_initial_world(config)
+    world, ad_delivery_state = initialize_ad_delivery(world, config.ad_campaigns)
     states_by_tick: list[tuple[SocialMediaUserState, ...]] = [world.states]
     feed_items: list[FeedItem] = []
     actions: list[PlatformAction] = []
@@ -60,6 +67,15 @@ def run_instagram_social_dynamics(
                 feed_size=config.feed_size,
                 feed_policy=config.feed_policy,
                 seed=config.seed,
+            )
+            feed = insert_sponsored_ads(
+                world=world,
+                viewer_id=profile.user_id,
+                tick=tick,
+                feed_items=feed,
+                feed_size=config.feed_size,
+                campaigns=config.ad_campaigns,
+                state=ad_delivery_state,
             )
             feed_items.extend(feed)
             action = policy.decide(
@@ -80,6 +96,9 @@ def run_instagram_social_dynamics(
         actions=tuple(actions),
         dm_messages=tuple(dm_messages),
         states_by_tick=tuple(states_by_tick),
+        ad_impressions=tuple(ad_delivery_state.impressions),
+        ad_campaigns=config.ad_campaigns,
+        ad_remaining_budget_by_campaign=ad_delivery_state.remaining_budget_by_campaign,
     )
     usage_summary = getattr(policy, "usage_summary", None)
     if callable(usage_summary):
@@ -95,6 +114,7 @@ def run_instagram_social_dynamics(
         states_by_tick=tuple(states_by_tick),
         metrics=metrics,
         llm_decisions=llm_decisions,
+        ad_impressions=tuple(ad_delivery_state.impressions),
     )
     return SocialMediaRunResult(
         final_world=world,
@@ -102,6 +122,7 @@ def run_instagram_social_dynamics(
         actions=tuple(actions),
         dm_messages=tuple(dm_messages),
         states_by_tick=tuple(states_by_tick),
+        ad_impressions=tuple(ad_delivery_state.impressions),
         metrics=metrics,
         output_dir=output_dir,
     )

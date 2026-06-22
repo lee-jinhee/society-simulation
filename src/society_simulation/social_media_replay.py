@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from society_simulation.social_media_ads import AdImpression
 from society_simulation.social_media_config import InstagramSocialDynamicsConfig
 from society_simulation.social_media_models import (
     DirectMessage,
@@ -30,6 +31,7 @@ class SocialMediaReplayWriter:
         states_by_tick: tuple[tuple[SocialMediaUserState, ...], ...],
         metrics: dict[str, Any],
         llm_decisions: tuple[dict[str, Any], ...],
+        ad_impressions: tuple[AdImpression, ...] = (),
     ) -> Path:
         output_dir = Path(self.config.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -53,6 +55,10 @@ class SocialMediaReplayWriter:
         self._write_jsonl(
             output_dir / "feed_impressions.jsonl",
             tuple(item.to_dict() for item in feed_items),
+        )
+        self._write_jsonl(
+            output_dir / "ad_impressions.jsonl",
+            tuple(impression.to_dict() for impression in ad_impressions),
         )
         self._write_jsonl(
             output_dir / "actions.jsonl",

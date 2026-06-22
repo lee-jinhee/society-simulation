@@ -11,7 +11,7 @@ SocialActionType = Literal[
     "create_post",
     "do_nothing",
 ]
-FeedSource = Literal["following", "explore", "intervention"]
+FeedSource = Literal["following", "explore", "intervention", "sponsored"]
 
 SUPPORTED_SOCIAL_ACTIONS: tuple[str, ...] = (
     "like_post",
@@ -21,7 +21,12 @@ SUPPORTED_SOCIAL_ACTIONS: tuple[str, ...] = (
     "create_post",
     "do_nothing",
 )
-SUPPORTED_FEED_SOURCES: tuple[str, ...] = ("following", "explore", "intervention")
+SUPPORTED_FEED_SOURCES: tuple[str, ...] = (
+    "following",
+    "explore",
+    "intervention",
+    "sponsored",
+)
 
 
 def _tuple_to_list(data: dict[str, object]) -> dict[str, object]:
@@ -110,6 +115,8 @@ class SocialMediaPost:
     like_count: int
     reply_count: int
     seed_post: bool
+    campaign_id: str | None = None
+    is_ad: bool = False
 
     def __post_init__(self) -> None:
         _validate_stance(self.stance, "stance")
@@ -153,6 +160,10 @@ class FeedItem:
     topic: str | None = None
     text: str | None = None
     author_handle: str | None = None
+    campaign_id: str | None = None
+    is_sponsored: bool = False
+    advertiser_id: int | None = None
+    ad_seen_count: int = 0
 
     def __post_init__(self) -> None:
         if self.source not in SUPPORTED_FEED_SOURCES:
@@ -161,6 +172,8 @@ class FeedItem:
             raise ValueError("rank must be non-negative")
         if self.visible_like_count < 0:
             raise ValueError("visible_like_count must be non-negative")
+        if self.ad_seen_count < 0:
+            raise ValueError("ad_seen_count must be non-negative")
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)

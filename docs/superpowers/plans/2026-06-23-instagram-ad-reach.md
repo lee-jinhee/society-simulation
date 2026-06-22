@@ -50,7 +50,7 @@ class AdCampaignConfig:
     creative_id: str
     creative_text: str
     topic: str
-    stance: str
+    stance: float
     start_tick: int
     end_tick: int
     budget_impressions: int
@@ -90,7 +90,8 @@ Extend `FeedSource` with:
 
 ### Validation Rules
 
-- `campaign_id`, `creative_id`, `creative_text`, `topic`, `stance` are non-empty.
+- `campaign_id`, `creative_id`, `creative_text`, and `topic` are non-empty.
+- `stance` is a finite number between -1 and 1.
 - `advertiser_id` is inside `0 <= advertiser_id < num_users`.
 - `topic` is included in `topics`.
 - `start_tick >= 1`, `end_tick >= start_tick`, and `end_tick <= ticks`.
@@ -163,7 +164,7 @@ Create helper functions:
 def initialize_ad_delivery(
     world: InstagramWorld,
     campaigns: Sequence[AdCampaignConfig],
-) -> AdDeliveryState:
+) -> tuple[InstagramWorld, AdDeliveryState]:
     ...
 
 def insert_sponsored_ads(

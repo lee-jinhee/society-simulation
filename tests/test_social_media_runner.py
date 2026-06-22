@@ -60,3 +60,40 @@ def test_llm_policy_requires_configured_api_key_env(tmp_path, monkeypatch) -> No
 
     with pytest.raises(ValueError, match="MISSING_SOCIAL_MEDIA_KEY environment variable is required"):
         run_instagram_social_dynamics(config)
+
+
+def test_runner_records_sponsored_ad_delivery(tmp_path) -> None:
+    config_path = tmp_path / "config.json"
+    data = _config(tmp_path)
+    data["ticks"] = 3
+    data["num_users"] = 8
+    data["feed_size"] = 3
+    data["ad_campaigns"] = [
+        {
+            "campaign_id": "maple_3rd_opening",
+            "advertiser_id": 0,
+            "ad_condition": "sponsored_ad",
+            "creative_id": "discount_offer",
+            "creative_text": "First 100 visitors get a free pastry with any drink.",
+            "topic": "transit",
+            "stance": 0.2,
+            "start_tick": 1,
+            "end_tick": 3,
+            "budget_impressions": 5,
+            "frequency_cap": 1,
+            "targeting": "broad",
+            "sponsored_like_count": 25,
+            "targeting_topics": ["transit"],
+        }
+    ]
+    config_path.write_text(json.dumps(data), encoding="utf-8")
+    config = load_config(config_path)
+
+    result = run_instagram_social_dynamics(config)
+
+    assert 0 < result.metrics["paid_impression_count"] <= 5
+    assert result.metrics["unique_paid_reach"] == result.metrics["paid_impression_count"]
+    assert result.ad_impressions
+    assert (result.output_dir / "ad_impressions.jsonl").exists()
+    assert any(item.source == "sponsored" for item in result.feed_items)
+    assert any(item.campaign_id == "maple_3rd_opening" for item in result.feed_items)

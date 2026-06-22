@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from math import isfinite
 from types import MappingProxyType
+from typing import Literal
 
 
 def _require_mapping(value: object, field: str) -> dict[str, object]:
@@ -110,6 +111,44 @@ _SECRET_UPDATE_POLICY_KEY_PATTERNS = (
     "authorization",
     "header",
 )
+_AD_CONDITIONS = {"no_ad", "organic_post", "sponsored_ad"}
+_AD_TARGETING_TYPES = {"broad", "interest_targeted"}
+
+
+@dataclass(frozen=True)
+class AdCampaignConfig:
+    campaign_id: str
+    advertiser_id: int
+    ad_condition: Literal["no_ad", "organic_post", "sponsored_ad"]
+    creative_id: str
+    creative_text: str
+    topic: str
+    stance: float
+    start_tick: int
+    end_tick: int
+    budget_impressions: int
+    frequency_cap: int
+    targeting: Literal["broad", "interest_targeted"]
+    sponsored_like_count: int = 0
+    targeting_topics: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "campaign_id": self.campaign_id,
+            "advertiser_id": self.advertiser_id,
+            "ad_condition": self.ad_condition,
+            "creative_id": self.creative_id,
+            "creative_text": self.creative_text,
+            "topic": self.topic,
+            "stance": self.stance,
+            "start_tick": self.start_tick,
+            "end_tick": self.end_tick,
+            "budget_impressions": self.budget_impressions,
+            "frequency_cap": self.frequency_cap,
+            "targeting": self.targeting,
+            "sponsored_like_count": self.sponsored_like_count,
+            "targeting_topics": list(self.targeting_topics),
+        }
 
 
 @dataclass(frozen=True)
@@ -128,6 +167,7 @@ class InstagramSocialDynamicsConfig:
     update_policy: Mapping[str, object]
     memory_retrieval: Mapping[str, object]
     seed_posts: tuple[Mapping[str, object], ...]
+    ad_campaigns: tuple[AdCampaignConfig, ...]
     output_dir: str
 
     @classmethod
@@ -172,6 +212,7 @@ class InstagramSocialDynamicsConfig:
             ),
             memory_retrieval=_normalize_memory_retrieval(data.get("memory_retrieval")),
             seed_posts=_normalize_seed_posts(data.get("seed_posts")),
+            ad_campaigns=_normalize_ad_campaigns(data.get("ad_campaigns")),
             output_dir=_require_non_empty_str(
                 _require_field(data, "output_dir", "output_dir"),
                 "output_dir",
@@ -190,6 +231,7 @@ class InstagramSocialDynamicsConfig:
         _validate_feed_policy(self.feed_policy)
         _validate_update_policy(self.update_policy)
         _validate_seed_posts(self)
+        _validate_ad_campaigns(self)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -207,6 +249,7 @@ class InstagramSocialDynamicsConfig:
             "update_policy": _json_ready(self.update_policy),
             "memory_retrieval": _json_ready(self.memory_retrieval),
             "seed_posts": _json_ready(self.seed_posts),
+            "ad_campaigns": [campaign.to_dict() for campaign in self.ad_campaigns],
             "output_dir": self.output_dir,
         }
 
@@ -247,6 +290,59 @@ def _normalize_seed_posts(value: object | None) -> tuple[Mapping[str, object], .
     return tuple(
         _freeze_json_mapping(post, f"seed_posts[{index}]")
         for index, post in enumerate(value)
+    )
+
+
+def _normalize_ad_campaigns(value: object | None) -> tuple[AdCampaignConfig, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ValueError("ad_campaigns must be a list")
+    return tuple(
+        _normalize_ad_campaign(campaign, f"ad_campaigns[{index}]")
+        for index, campaign in enumerate(value)
+    )
+
+
+def _normalize_ad_campaign(value: object, prefix: str) -> AdCampaignConfig:
+    campaign = _require_mapping(value, prefix)
+    topic = _require_non_empty_str(campaign.get("topic"), f"{prefix}.topic")
+    targeting_topics_value = campaign.get("targeting_topics")
+    targeting_topics = (
+        _require_str_sequence(targeting_topics_value, f"{prefix}.targeting_topics")
+        if targeting_topics_value is not None
+        else (topic,)
+    )
+    return AdCampaignConfig(
+        campaign_id=_require_non_empty_str(campaign.get("campaign_id"), f"{prefix}.campaign_id"),
+        advertiser_id=_require_int(campaign.get("advertiser_id"), f"{prefix}.advertiser_id"),
+        ad_condition=_require_non_empty_str(
+            campaign.get("ad_condition"),
+            f"{prefix}.ad_condition",
+        ),  # type: ignore[arg-type]
+        creative_id=_require_non_empty_str(campaign.get("creative_id"), f"{prefix}.creative_id"),
+        creative_text=_require_non_empty_str(
+            campaign.get("creative_text"),
+            f"{prefix}.creative_text",
+        ),
+        topic=topic,
+        stance=_require_float(campaign.get("stance"), f"{prefix}.stance"),
+        start_tick=_require_int(campaign.get("start_tick"), f"{prefix}.start_tick"),
+        end_tick=_require_int(campaign.get("end_tick"), f"{prefix}.end_tick"),
+        budget_impressions=_require_int(
+            campaign.get("budget_impressions"),
+            f"{prefix}.budget_impressions",
+        ),
+        frequency_cap=_require_int(campaign.get("frequency_cap"), f"{prefix}.frequency_cap"),
+        targeting=_require_non_empty_str(
+            campaign.get("targeting"),
+            f"{prefix}.targeting",
+        ),  # type: ignore[arg-type]
+        sponsored_like_count=_require_int(
+            campaign.get("sponsored_like_count", 0),
+            f"{prefix}.sponsored_like_count",
+        ),
+        targeting_topics=targeting_topics,
     )
 
 
@@ -339,3 +435,42 @@ def _validate_seed_posts(config: InstagramSocialDynamicsConfig) -> None:
         reply_count = _require_int(post.get("reply_count", 0), f"{prefix}.reply_count")
         if reply_count < 0:
             raise ValueError(f"{prefix}.reply_count must be non-negative")
+
+
+def _validate_ad_campaigns(config: InstagramSocialDynamicsConfig) -> None:
+    seen_campaign_ids: set[str] = set()
+    topics = set(config.topics)
+    for index, campaign in enumerate(config.ad_campaigns):
+        prefix = f"ad_campaigns[{index}]"
+        if campaign.campaign_id in seen_campaign_ids:
+            raise ValueError(f"{prefix}.campaign_id must be unique")
+        seen_campaign_ids.add(campaign.campaign_id)
+        if campaign.ad_condition not in _AD_CONDITIONS:
+            raise ValueError(f"unsupported {prefix}.ad_condition")
+        if campaign.targeting not in _AD_TARGETING_TYPES:
+            raise ValueError(f"unsupported {prefix}.targeting")
+        if campaign.advertiser_id < 0 or campaign.advertiser_id >= config.num_users:
+            raise ValueError(f"{prefix}.advertiser_id must reference an existing user")
+        if campaign.topic not in topics:
+            raise ValueError(f"{prefix}.topic must be listed in topics")
+        if not -1.0 <= campaign.stance <= 1.0:
+            raise ValueError(f"{prefix}.stance must be between -1 and 1")
+        if campaign.start_tick < 1:
+            raise ValueError(f"{prefix}.start_tick must be at least 1")
+        if campaign.end_tick < campaign.start_tick:
+            raise ValueError(f"{prefix}.end_tick must be greater than or equal to start_tick")
+        if campaign.end_tick > config.ticks:
+            raise ValueError(f"{prefix}.end_tick must not exceed ticks")
+        if campaign.budget_impressions < 0:
+            raise ValueError(f"{prefix}.budget_impressions must be non-negative")
+        if campaign.frequency_cap < 0:
+            raise ValueError(f"{prefix}.frequency_cap must be non-negative")
+        if campaign.ad_condition == "sponsored_ad" and campaign.budget_impressions <= 0:
+            raise ValueError(f"{prefix}.budget_impressions must be positive for sponsored_ad")
+        if campaign.ad_condition == "sponsored_ad" and campaign.frequency_cap <= 0:
+            raise ValueError(f"{prefix}.frequency_cap must be positive for sponsored_ad")
+        if campaign.sponsored_like_count < 0:
+            raise ValueError(f"{prefix}.sponsored_like_count must be non-negative")
+        for topic in campaign.targeting_topics:
+            if topic not in topics:
+                raise ValueError(f"{prefix}.targeting_topics must be listed in topics")

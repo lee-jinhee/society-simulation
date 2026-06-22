@@ -81,6 +81,28 @@ def test_post_like_increments_without_mutating_original() -> None:
     assert updated.like_count == 5
 
 
+def test_post_preserves_campaign_metadata_when_liked() -> None:
+    post = SocialMediaPost(
+        post_id="ad-maple",
+        author_id=2,
+        topic="coffee",
+        stance=0.2,
+        text="Free pastry with any drink.",
+        created_tick=2,
+        like_count=4,
+        reply_count=0,
+        seed_post=False,
+        campaign_id="maple_3rd_opening",
+        is_ad=True,
+    )
+
+    updated = post.with_like()
+
+    assert updated.like_count == 5
+    assert updated.campaign_id == "maple_3rd_opening"
+    assert updated.is_ad is True
+
+
 def test_feed_item_records_recommendation_reason() -> None:
     item = FeedItem(
         tick=2,
@@ -94,6 +116,31 @@ def test_feed_item_records_recommendation_reason() -> None:
     )
 
     assert item.to_dict()["source"] == "explore"
+
+
+def test_feed_item_records_sponsored_campaign_metadata() -> None:
+    item = FeedItem(
+        tick=3,
+        viewer_id=1,
+        post_id="ad-maple",
+        author_id=0,
+        score=10.0,
+        rank=0,
+        source="sponsored",
+        reason="sponsored_targeted",
+        visible_like_count=25,
+        topic="coffee",
+        text="Free pastry with any drink.",
+        author_handle="maple_3rd_coffee",
+        campaign_id="maple_3rd_opening",
+        is_sponsored=True,
+        advertiser_id=0,
+        ad_seen_count=1,
+    )
+
+    assert item.to_dict()["campaign_id"] == "maple_3rd_opening"
+    assert item.to_dict()["is_sponsored"] is True
+    assert item.to_dict()["ad_seen_count"] == 1
 
 
 def test_follow_edge_round_trip() -> None:

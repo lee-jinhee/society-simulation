@@ -20,7 +20,7 @@ def build_feed(
     if policy_type == "no_feed_control":
         return ()
     followed_ids = _followed_ids(world, viewer_id)
-    candidates = _candidate_posts(world, viewer_id, followed_ids, policy_type)
+    candidates = _candidate_posts(world, viewer_id, followed_ids, policy_type, tick)
     rng = random.Random(seed + tick * 1009 + viewer_id * 9173)
     scored = [
         _score_post(
@@ -49,6 +49,8 @@ def build_feed(
             topic=post.topic,
             text=post.text,
             author_handle=world.profile_by_id()[post.author_id].handle,
+            campaign_id=post.campaign_id,
+            advertiser_id=post.author_id if post.is_ad else None,
         )
         for rank, (score, post, reason) in enumerate(ranked[:feed_size])
     )
@@ -67,15 +69,24 @@ def _candidate_posts(
     viewer_id: int,
     followed_ids: set[int],
     policy_type: str,
+    tick: int,
 ) -> tuple[SocialMediaPost, ...]:
     if policy_type == "chronological_following":
         return tuple(
             sorted(
-                (post for post in world.posts if post.author_id in followed_ids),
+                (
+                    post
+                    for post in world.posts
+                    if post.author_id in followed_ids and post.created_tick <= tick
+                ),
                 key=lambda post: (-post.created_tick, post.post_id),
             )
         )
-    return tuple(post for post in world.posts if post.author_id != viewer_id)
+    return tuple(
+        post
+        for post in world.posts
+        if post.author_id != viewer_id and post.created_tick <= tick
+    )
 
 
 def _score_post(

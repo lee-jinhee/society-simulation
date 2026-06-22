@@ -122,3 +122,46 @@ def test_no_feed_control_returns_empty_feed() -> None:
     )
 
     assert feed == ()
+
+
+def test_feed_excludes_posts_created_after_current_tick() -> None:
+    world = _world()
+    future_post = SocialMediaPost(
+        "future-ad",
+        1,
+        "transit",
+        0.2,
+        "This campaign starts later.",
+        5,
+        99,
+        0,
+        False,
+        campaign_id="maple_3rd_opening",
+        is_ad=True,
+    )
+    world = SocialMediaWorld(
+        profiles=world.profiles,
+        states=world.states,
+        posts=(*world.posts, future_post),
+        follow_edges=world.follow_edges,
+    )
+
+    before_start = build_feed(
+        world=world,
+        viewer_id=0,
+        tick=4,
+        feed_size=5,
+        feed_policy=_policy("engagement_ranked"),
+        seed=99,
+    )
+    after_start = build_feed(
+        world=world,
+        viewer_id=0,
+        tick=5,
+        feed_size=5,
+        feed_policy=_policy("engagement_ranked"),
+        seed=99,
+    )
+
+    assert "future-ad" not in [item.post_id for item in before_start]
+    assert "future-ad" in [item.post_id for item in after_start]
