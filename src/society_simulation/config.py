@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Literal
 
 from society_simulation.event_config import EventDrivenOpinionConfig
+from society_simulation.social_media_config import InstagramSocialDynamicsConfig
 
 Action = Literal["A", "B"]
 
@@ -669,7 +670,12 @@ class NetworkHerdingConfig:
         }
 
 
-Config = ExperimentConfig | NetworkHerdingConfig | EventDrivenOpinionConfig
+Config = (
+    ExperimentConfig
+    | NetworkHerdingConfig
+    | EventDrivenOpinionConfig
+    | InstagramSocialDynamicsConfig
+)
 
 
 def load_config(path: str | Path) -> Config:
@@ -681,6 +687,8 @@ def load_config(path: str | Path) -> Config:
         config = NetworkHerdingConfig.from_dict(data)
     elif data.get("experiment_name") == "event_driven_opinion_dynamics":
         config = EventDrivenOpinionConfig.from_dict(data)
+    elif data.get("experiment_name") == "instagram_social_dynamics":
+        config = InstagramSocialDynamicsConfig.from_dict(data)
     else:
         config = ExperimentConfig(**data)
     config.validate()
