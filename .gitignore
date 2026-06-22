@@ -21,3 +21,6 @@ coverage/
 .env
 .env.*
 runs/
+
+# Downloaded research source PDFs; keep the source manifest tracked instead.
+docs/research/reference_papers/*.pdf
