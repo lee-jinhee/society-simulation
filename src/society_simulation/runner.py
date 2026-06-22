@@ -15,6 +15,11 @@ from society_simulation.policies import build_update_policy
 from society_simulation.replay import ReplayWriter
 from society_simulation.scheduling import PreviousActionsObservation, SequentialScheduler
 from society_simulation.signals import BinarySignalModel
+from society_simulation.social_media_config import InstagramSocialDynamicsConfig
+from society_simulation.social_media_runner import (
+    SocialMediaRunResult,
+    run_instagram_social_dynamics,
+)
 
 
 @dataclass(frozen=True)
@@ -25,11 +30,15 @@ class RunResult:
     output_dir: Path
 
 
-def run_experiment(config: Config) -> RunResult | NetworkRunResult | EventRunResult:
+def run_experiment(
+    config: Config,
+) -> RunResult | NetworkRunResult | EventRunResult | SocialMediaRunResult:
     if isinstance(config, NetworkHerdingConfig):
         return run_network_herding(config)
     if isinstance(config, EventDrivenOpinionConfig):
         return run_event_driven_opinion_dynamics(config)
+    if isinstance(config, InstagramSocialDynamicsConfig):
+        return run_instagram_social_dynamics(config)
     return run_sequential_information_cascade(config)
 
 
