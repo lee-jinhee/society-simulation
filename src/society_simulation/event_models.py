@@ -108,7 +108,12 @@ class EventAgentState:
     public_stance: float
     confidence: float
     salience: float
+    willingness_to_speak: float
+    perceived_majority: float
+    fairness_concern: float
+    trust_in_official_info: float
     emotion: str
+    silence_reason: str
     memory_summary: str
     last_private_reasoning: str
 
@@ -127,7 +132,32 @@ class EventAgentState:
         )
         object.__setattr__(self, "confidence", validate_probability(self.confidence, "confidence"))
         object.__setattr__(self, "salience", validate_probability(self.salience, "salience"))
+        object.__setattr__(
+            self,
+            "willingness_to_speak",
+            validate_probability(self.willingness_to_speak, "willingness_to_speak"),
+        )
+        object.__setattr__(
+            self,
+            "perceived_majority",
+            validate_stance(self.perceived_majority, "perceived_majority"),
+        )
+        object.__setattr__(
+            self,
+            "fairness_concern",
+            validate_probability(self.fairness_concern, "fairness_concern"),
+        )
+        object.__setattr__(
+            self,
+            "trust_in_official_info",
+            validate_probability(self.trust_in_official_info, "trust_in_official_info"),
+        )
         object.__setattr__(self, "emotion", _require_non_empty_str(self.emotion, "emotion"))
+        object.__setattr__(
+            self,
+            "silence_reason",
+            _require_non_empty_str(self.silence_reason, "silence_reason"),
+        )
         object.__setattr__(
             self,
             "memory_summary",
@@ -288,7 +318,12 @@ class EventAgentProfile:
             public_stance=self.initial_public_stance,
             confidence=self.initial_confidence,
             salience=self.initial_salience,
+            willingness_to_speak=0.5,
+            perceived_majority=0.0,
+            fairness_concern=0.3,
+            trust_in_official_info=self.political_trust,
             emotion="calm",
+            silence_reason="not_silent",
             memory_summary=f"{self.name} starts with their existing perspective.",
             last_private_reasoning=f"{self.name}'s initial view reflects their profile.",
         )

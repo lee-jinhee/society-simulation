@@ -50,7 +50,12 @@ def _valid_agent_state_kwargs() -> dict[str, object]:
         "public_stance": 0.0,
         "confidence": 0.52,
         "salience": 0.77,
+        "willingness_to_speak": 0.42,
+        "perceived_majority": -0.1,
+        "fairness_concern": 0.73,
+        "trust_in_official_info": 0.38,
         "emotion": "worried",
+        "silence_reason": "Waiting to see whether exemptions are real.",
         "memory_summary": "Jisoo is worried about commute costs.",
         "last_private_reasoning": "The taxi story felt concrete.",
     }
@@ -118,6 +123,18 @@ def test_agent_profile_from_dict_validates_required_fields() -> None:
         ("public_stance", -1.1, "public_stance must be a number between -1 and 1"),
         ("confidence", -0.1, "confidence must be a number between 0 and 1"),
         ("salience", float("inf"), "salience must be a number between 0 and 1"),
+        (
+            "willingness_to_speak",
+            -0.1,
+            "willingness_to_speak must be a number between 0 and 1",
+        ),
+        ("perceived_majority", 1.1, "perceived_majority must be a number between -1 and 1"),
+        ("fairness_concern", 1.1, "fairness_concern must be a number between 0 and 1"),
+        (
+            "trust_in_official_info",
+            -0.1,
+            "trust_in_official_info must be a number between 0 and 1",
+        ),
     ],
 )
 def test_agent_state_rejects_invalid_stance_and_probability_fields(
@@ -137,6 +154,7 @@ def test_agent_state_rejects_invalid_stance_and_probability_fields(
     [
         ("agent_id", "agent_id must be a non-empty string"),
         ("emotion", "emotion must be a non-empty string"),
+        ("silence_reason", "silence_reason must be a non-empty string"),
         ("memory_summary", "memory_summary must be a non-empty string"),
         ("last_private_reasoning", "last_private_reasoning must be a non-empty string"),
     ],

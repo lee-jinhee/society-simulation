@@ -222,7 +222,12 @@ def _copy_state(
         public_stance=current_state.public_stance,
         confidence=current_state.confidence,
         salience=current_state.salience,
+        willingness_to_speak=current_state.willingness_to_speak,
+        perceived_majority=current_state.perceived_majority,
+        fairness_concern=current_state.fairness_concern,
+        trust_in_official_info=current_state.trust_in_official_info,
         emotion=current_state.emotion,
+        silence_reason=current_state.silence_reason,
         memory_summary=current_state.memory_summary,
         last_private_reasoning=current_state.last_private_reasoning,
     )
@@ -330,17 +335,7 @@ def test_event_runner_rejects_generated_message_for_unknown_channel(
         def decide(self, profile, current_state, exposures, *, day):  # type: ignore[no-untyped-def]
             del exposures
             return EventPolicyDecision(
-                state=EventAgentState(
-                    agent_id=profile.agent_id,
-                    day=day,
-                    private_stance=current_state.private_stance,
-                    public_stance=current_state.public_stance,
-                    confidence=current_state.confidence,
-                    salience=current_state.salience,
-                    emotion=current_state.emotion,
-                    memory_summary=current_state.memory_summary,
-                    last_private_reasoning=current_state.last_private_reasoning,
-                ),
+                state=_copy_state(current_state, agent_id=profile.agent_id, day=day),
                 messages=(
                     EventMessage(
                         day=day,
@@ -366,17 +361,7 @@ def test_event_runner_rejects_generated_message_for_wrong_sender(
         def decide(self, profile, current_state, exposures, *, day):  # type: ignore[no-untyped-def]
             del profile, exposures
             return EventPolicyDecision(
-                state=EventAgentState(
-                    agent_id=current_state.agent_id,
-                    day=day,
-                    private_stance=current_state.private_stance,
-                    public_stance=current_state.public_stance,
-                    confidence=current_state.confidence,
-                    salience=current_state.salience,
-                    emotion=current_state.emotion,
-                    memory_summary=current_state.memory_summary,
-                    last_private_reasoning=current_state.last_private_reasoning,
-                ),
+                state=_copy_state(current_state, day=day),
                 messages=(
                     EventMessage(
                         day=day,

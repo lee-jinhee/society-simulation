@@ -85,6 +85,11 @@ class EventReplayWriter:
             f"- final_private_stance_mean: `{metrics.get('final_private_stance_mean')}`",
             f"- final_public_stance_mean: `{metrics.get('final_public_stance_mean')}`",
             f"- final_private_public_gap: `{metrics.get('final_private_public_gap')}`",
+            f"- final_silent_agent_rate: `{metrics.get('final_silent_agent_rate')}`",
+            f"- final_public_expression_bias: `{metrics.get('final_public_expression_bias')}`",
+            f"- final_perceived_majority_error: `{metrics.get('final_perceived_majority_error')}`",
+            f"- final_mean_fairness_concern: `{metrics.get('final_mean_fairness_concern')}`",
+            f"- final_mean_trust_in_official_info: `{metrics.get('final_mean_trust_in_official_info')}`",
         ]
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

@@ -51,44 +51,62 @@ def exposure() -> EventExposure:
     )
 
 
+def decision_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "private_stance": 0.1,
+        "public_stance": 0.0,
+        "confidence": 0.5,
+        "salience": 0.6,
+        "willingness_to_speak": 0.25,
+        "perceived_majority": -0.15,
+        "fairness_concern": 0.8,
+        "trust_in_official_info": 0.35,
+        "emotion": "conflicted",
+        "silence_reason": "I am not sure the group wants to hear another complaint.",
+        "private_reasoning": "The announcement is plausible but costly.",
+        "messages": [],
+        "memory_update": "Jisoo remains conflicted.",
+    }
+    payload.update(overrides)
+    return payload
+
+
 def llm_decision_content() -> str:
-    return json.dumps(
-        {
-            "private_stance": 0.1,
-            "public_stance": 0.0,
-            "confidence": 0.5,
-            "salience": 0.6,
-            "emotion": "conflicted",
-            "private_reasoning": "The announcement is plausible but costly.",
-            "messages": [],
-            "memory_update": "Jisoo remains conflicted.",
-        }
-    )
+    return json.dumps(decision_payload())
 
 
 def test_parse_event_decision_content_requires_complete_json() -> None:
     decision = parse_event_decision_content(
         json.dumps(
-            {
-                "private_stance": 0.2,
-                "public_stance": 0.1,
-                "confidence": 0.6,
-                "salience": 0.7,
-                "emotion": "conflicted",
-                "private_reasoning": "The policy helps traffic but adds costs.",
-                "messages": [
+            decision_payload(
+                private_stance=0.2,
+                public_stance=0.1,
+                confidence=0.6,
+                salience=0.7,
+                willingness_to_speak=0.85,
+                perceived_majority=0.35,
+                fairness_concern=0.62,
+                trust_in_official_info=0.5,
+                silence_reason="not_silent",
+                private_reasoning="The policy helps traffic but adds costs.",
+                messages=[
                     {
                         "channel": "neighborhood_group_chat",
                         "recipient": None,
                         "text": "I can see both sides here.",
                     }
                 ],
-                "memory_update": "Jisoo is more conflicted after the city announcement.",
-            }
+                memory_update="Jisoo is more conflicted after the city announcement.",
+            )
         )
     )
 
     assert decision.state.private_stance == 0.2
+    assert decision.state.willingness_to_speak == 0.85
+    assert decision.state.perceived_majority == 0.35
+    assert decision.state.fairness_concern == 0.62
+    assert decision.state.trust_in_official_info == 0.5
+    assert decision.state.silence_reason == "not_silent"
     assert decision.messages[0].text == "I can see both sides here."
 
 
@@ -168,18 +186,7 @@ def test_openai_compatible_persona_policy_sends_human_role_prompt_without_experi
             "choices": [
                 {
                     "message": {
-                        "content": json.dumps(
-                            {
-                                "private_stance": 0.1,
-                                "public_stance": 0.0,
-                                "confidence": 0.5,
-                                "salience": 0.6,
-                                "emotion": "conflicted",
-                                "private_reasoning": "The announcement is plausible but costly.",
-                                "messages": [],
-                                "memory_update": "Jisoo remains conflicted.",
-                            }
-                        )
+                        "content": llm_decision_content()
                     }
                 }
             ],
@@ -198,6 +205,7 @@ def test_openai_compatible_persona_policy_sends_human_role_prompt_without_experi
     decision = policy.decide(profile(), state(), (exposure(),), day=1)
 
     assert decision.state.private_stance == 0.1
+    assert decision.state.willingness_to_speak == 0.25
     payload = captured["payload"]
     assert isinstance(payload, dict)
     messages = payload["messages"]
@@ -207,7 +215,13 @@ def test_openai_compatible_persona_policy_sends_human_role_prompt_without_experi
     assert "simulation" not in prompt_text.lower()
     assert "experiment" not in prompt_text.lower()
     assert "social network experiment" not in prompt_text
-    assert "secret-key" not in json.dumps(policy.audit_records(), sort_keys=True)
+    audit_records = policy.audit_records()
+    assert audit_records[0]["parsed_willingness_to_speak"] == 0.25
+    assert audit_records[0]["parsed_perceived_majority"] == -0.15
+    assert audit_records[0]["parsed_fairness_concern"] == 0.8
+    assert audit_records[0]["parsed_trust_in_official_info"] == 0.35
+    assert audit_records[0]["parsed_silence_reason"]
+    assert "secret-key" not in json.dumps(audit_records, sort_keys=True)
 
 
 def test_openai_compatible_persona_policy_includes_message_constraints() -> None:
@@ -248,6 +262,12 @@ def test_openai_compatible_persona_policy_includes_message_constraints() -> None
     assert "recipient must be null or one of allowed_recipients" in prompt_text
     assert "Do not use event ids or source ids as recipients" in prompt_text
     assert "At most one message" in prompt_text
+    assert "zero messages is allowed" in prompt_text
+    assert "willingness_to_speak" in prompt_text
+    assert "perceived_majority" in prompt_text
+    assert "fairness_concern" in prompt_text
+    assert "trust_in_official_info" in prompt_text
+    assert "silence_reason" in prompt_text
     assert "private_reasoning under 280 characters" in prompt_text
     assert "message text under 180 characters" in prompt_text
 
@@ -416,18 +436,7 @@ def test_openai_compatible_persona_policy_redacts_echoed_secrets_from_audit() ->
             "choices": [
                 {
                     "message": {
-                        "content": json.dumps(
-                            {
-                                "private_stance": 0.1,
-                                "public_stance": 0.0,
-                                "confidence": 0.5,
-                                "salience": 0.6,
-                                "emotion": "conflicted",
-                                "private_reasoning": "The announcement is plausible but costly.",
-                                "messages": [],
-                                "memory_update": "Jisoo remains conflicted.",
-                            }
-                        )
+                        "content": llm_decision_content()
                     }
                 }
             ],
@@ -465,18 +474,7 @@ def test_openai_compatible_persona_policy_redacts_api_key_echo_values_from_audit
             "choices": [
                 {
                     "message": {
-                        "content": json.dumps(
-                            {
-                                "private_stance": 0.1,
-                                "public_stance": 0.0,
-                                "confidence": 0.5,
-                                "salience": 0.6,
-                                "emotion": "conflicted",
-                                "private_reasoning": "The announcement is plausible but costly.",
-                                "messages": [],
-                                "memory_update": "Jisoo remains conflicted.",
-                            }
-                        )
+                        "content": llm_decision_content()
                     }
                 }
             ],
@@ -508,24 +506,20 @@ def test_openai_compatible_persona_policy_redacts_parsed_output_secrets_from_aud
                 {
                     "message": {
                         "content": json.dumps(
-                            {
-                                "private_stance": 0.1,
-                                "public_stance": 0.0,
-                                "confidence": 0.5,
-                                "salience": 0.6,
-                                "emotion": "conflicted",
-                                "private_reasoning": (
+                            decision_payload(
+                                private_reasoning=(
                                     "Authorization: Bearer secret-key shaped my view."
                                 ),
-                                "messages": [
+                                messages=[
                                     {
                                         "channel": "neighborhood_group_chat",
                                         "recipient": None,
                                         "text": "api_key secret-key should not be stored.",
                                     }
                                 ],
-                                "memory_update": "Remembered api_key secret-key from the note.",
-                            }
+                                silence_reason="not_silent",
+                                memory_update="Remembered api_key secret-key from the note.",
+                            )
                         )
                     }
                 }

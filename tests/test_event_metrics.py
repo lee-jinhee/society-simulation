@@ -15,6 +15,11 @@ def state(
     emotion: str = "calm",
     confidence: float = 0.5,
     salience: float = 0.6,
+    willingness: float = 0.5,
+    perceived_majority: float = 0.0,
+    fairness: float = 0.3,
+    official_trust: float = 0.5,
+    silence_reason: str = "not_silent",
 ) -> EventAgentState:
     return EventAgentState(
         agent_id=agent_id,
@@ -23,7 +28,12 @@ def state(
         public_stance=public,
         confidence=confidence,
         salience=salience,
+        willingness_to_speak=willingness,
+        perceived_majority=perceived_majority,
+        fairness_concern=fairness,
+        trust_in_official_info=official_trust,
         emotion=emotion,
+        silence_reason=silence_reason,
         memory_summary="memory",
         last_private_reasoning="reason",
     )
@@ -33,14 +43,39 @@ def test_compute_event_timeseries_tracks_private_public_gap_and_messages() -> No
     states_by_day = (
         (state("a", 0, -0.2, 0.0), state("b", 0, 0.2, 0.0)),
         (
-            state("a", 1, -0.4, -0.1, "worried", confidence=0.7, salience=0.8),
-            state("b", 1, 0.3, 0.1, "hopeful", confidence=0.9, salience=0.4),
+            state(
+                "a",
+                1,
+                -0.4,
+                -0.1,
+                "worried",
+                confidence=0.7,
+                salience=0.8,
+                willingness=0.2,
+                perceived_majority=0.4,
+                fairness=0.9,
+                official_trust=0.25,
+                silence_reason="I do not want to pile on publicly.",
+            ),
+            state(
+                "b",
+                1,
+                0.3,
+                0.1,
+                "hopeful",
+                confidence=0.9,
+                salience=0.4,
+                willingness=0.8,
+                perceived_majority=0.2,
+                fairness=0.4,
+                official_trust=0.7,
+            ),
         ),
     )
     messages = (
         EventMessage(
             day=1,
-            sender_agent_id="a",
+            sender_agent_id="b",
             channel="chat",
             recipient_agent_id=None,
             text="text",
@@ -64,6 +99,14 @@ def test_compute_event_timeseries_tracks_private_public_gap_and_messages() -> No
     assert rows[1]["public_stance_variance"] == pytest.approx(0.01)
     assert rows[1]["mean_confidence"] == pytest.approx(0.8)
     assert rows[1]["mean_salience"] == pytest.approx(0.6)
+    assert rows[1]["mean_willingness_to_speak"] == pytest.approx(0.5)
+    assert rows[1]["silent_agent_count"] == 1
+    assert rows[1]["silent_agent_rate"] == pytest.approx(0.5)
+    assert rows[1]["mean_perceived_majority"] == pytest.approx(0.3)
+    assert rows[1]["perceived_majority_error"] == pytest.approx(0.35)
+    assert rows[1]["mean_fairness_concern"] == pytest.approx(0.65)
+    assert rows[1]["mean_trust_in_official_info"] == pytest.approx(0.475)
+    assert rows[1]["public_expression_bias"] == pytest.approx(0.05)
     assert rows[1]["message_count"] == 2
     assert rows[1]["private_message_count"] == 1
     assert rows[1]["public_message_count"] == 1
@@ -73,14 +116,28 @@ def test_compute_event_timeseries_tracks_private_public_gap_and_messages() -> No
 def test_compute_event_metrics_uses_final_day() -> None:
     states_by_day = (
         (state("a", 0, 0.0, 0.0),),
-        (state("a", 1, 0.5, 0.25, confidence=0.8, salience=0.4),),
+        (
+            state(
+                "a",
+                1,
+                0.5,
+                0.25,
+                confidence=0.8,
+                salience=0.4,
+                willingness=0.3,
+                perceived_majority=0.1,
+                fairness=0.7,
+                official_trust=0.2,
+                silence_reason="I would wait before posting.",
+            ),
+        ),
     )
     messages = (
         EventMessage(
             day=1,
             sender_agent_id="a",
             channel="chat",
-            recipient_agent_id=None,
+            recipient_agent_id="b",
             text="text",
         ),
     )
@@ -97,6 +154,14 @@ def test_compute_event_metrics_uses_final_day() -> None:
     assert metrics["final_public_stance_variance"] == pytest.approx(0.0)
     assert metrics["final_mean_confidence"] == pytest.approx(0.8)
     assert metrics["final_mean_salience"] == pytest.approx(0.4)
+    assert metrics["final_mean_willingness_to_speak"] == pytest.approx(0.3)
+    assert metrics["final_silent_agent_count"] == 1
+    assert metrics["final_silent_agent_rate"] == pytest.approx(1.0)
+    assert metrics["final_mean_perceived_majority"] == pytest.approx(0.1)
+    assert metrics["final_perceived_majority_error"] == pytest.approx(0.4)
+    assert metrics["final_mean_fairness_concern"] == pytest.approx(0.7)
+    assert metrics["final_mean_trust_in_official_info"] == pytest.approx(0.2)
+    assert metrics["final_public_expression_bias"] == pytest.approx(-0.25)
     assert metrics["timeseries"][-1]["message_count"] == 1
 
 

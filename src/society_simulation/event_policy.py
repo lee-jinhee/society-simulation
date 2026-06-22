@@ -34,7 +34,12 @@ _REQUIRED_DECISION_FIELDS = (
     "public_stance",
     "confidence",
     "salience",
+    "willingness_to_speak",
+    "perceived_majority",
+    "fairness_concern",
+    "trust_in_official_info",
     "emotion",
+    "silence_reason",
     "private_reasoning",
     "messages",
     "memory_update",
@@ -89,7 +94,12 @@ def parse_event_decision_content(
         public_stance=data["public_stance"],
         confidence=data["confidence"],
         salience=data["salience"],
+        willingness_to_speak=data["willingness_to_speak"],
+        perceived_majority=data["perceived_majority"],
+        fairness_concern=data["fairness_concern"],
+        trust_in_official_info=data["trust_in_official_info"],
         emotion=_require_non_empty_str(data["emotion"], "emotion"),
+        silence_reason=_require_non_empty_str(data["silence_reason"], "silence_reason"),
         memory_summary=_require_non_empty_str(data["memory_update"], "memory_update"),
         last_private_reasoning=_require_non_empty_str(
             data["private_reasoning"],
@@ -203,6 +213,9 @@ class MockPersonaPolicy:
                     "text": "I am weighing the benefits and costs before deciding where I land.",
                 }
             )
+        willingness_to_speak = 0.7 if messages else 0.2
+        fairness_concern = 0.6 if delta < 0 else 0.35
+        silence_reason = "not_silent" if messages else "Not enough new information to post."
 
         return json.dumps(
             {
@@ -210,7 +223,12 @@ class MockPersonaPolicy:
                 "public_stance": public_stance,
                 "confidence": confidence,
                 "salience": salience,
+                "willingness_to_speak": willingness_to_speak,
+                "perceived_majority": public_stance,
+                "fairness_concern": fairness_concern,
+                "trust_in_official_info": profile.political_trust,
                 "emotion": "conflicted" if exposures else current_state.emotion,
+                "silence_reason": silence_reason,
                 "private_reasoning": _mock_private_reasoning(delta, exposures),
                 "messages": messages,
                 "memory_update": _mock_memory_update(profile, exposures),
@@ -463,12 +481,18 @@ def _event_user_message(
     )
     memory_context = _memory_context(retrieved_memories)
     return (
-        "Consider the new information and decide how your views and messages change.\n"
+        "Consider the new information as this local resident and decide how your "
+        "private view, public posture, and willingness to speak change.\n"
         "Return only JSON with keys private_stance, public_stance, confidence, salience, "
-        "emotion, private_reasoning, messages, and memory_update.\n"
+        "willingness_to_speak, perceived_majority, fairness_concern, "
+        "trust_in_official_info, emotion, silence_reason, private_reasoning, "
+        "messages, and memory_update.\n"
+        "willingness_to_speak, fairness_concern, and trust_in_official_info must be "
+        "numbers from 0 to 1. perceived_majority must be a stance estimate from -1 to 1.\n"
+        "silence_reason should briefly say why you did not post; use not_silent if you post.\n"
         "Keep private_reasoning under 280 characters and memory_update under 160 characters.\n"
         "messages must be a list of objects with channel, recipient, and text. "
-        "At most one message. Keep message text under 180 characters.\n"
+        "At most one message; zero messages is allowed. Keep message text under 180 characters.\n"
         "For messages, channel must be one of allowed_channels; "
         "recipient must be null or one of allowed_recipients. "
         "Use null for group/channel posts. Do not use event ids or source ids as recipients.\n"
@@ -530,7 +554,12 @@ def _event_audit_record(
         "parsed_public_stance": state.public_stance,
         "parsed_confidence": state.confidence,
         "parsed_salience": state.salience,
+        "parsed_willingness_to_speak": state.willingness_to_speak,
+        "parsed_perceived_majority": state.perceived_majority,
+        "parsed_fairness_concern": state.fairness_concern,
+        "parsed_trust_in_official_info": state.trust_in_official_info,
         "parsed_emotion": state.emotion,
+        "parsed_silence_reason": state.silence_reason,
         "parsed_memory_summary": state.memory_summary,
         "parsed_private_reasoning": state.last_private_reasoning,
         "parsed_messages": [message.to_dict() for message in decision.messages],

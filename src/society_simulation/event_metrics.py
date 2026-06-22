@@ -24,13 +24,21 @@ def compute_event_timeseries(
         previous_day = day
         private_values = [state.private_stance for state in states]
         public_values = [state.public_stance for state in states]
+        perceived_majority_values = [state.perceived_majority for state in states]
         gaps = [abs(state.private_stance - state.public_stance) for state in states]
         day_messages = [message for message in messages if message.day == day]
+        public_senders = {
+            message.sender_agent_id for message in day_messages if message.recipient_agent_id is None
+        }
+        silent_agent_count = sum(1 for state in states if state.agent_id not in public_senders)
+        mean_private_stance = mean(private_values)
+        mean_public_stance = mean(public_values)
+        mean_perceived_majority = mean(perceived_majority_values)
         rows.append(
             {
                 "day": day,
-                "mean_private_stance": mean(private_values),
-                "mean_public_stance": mean(public_values),
+                "mean_private_stance": mean_private_stance,
+                "mean_public_stance": mean_public_stance,
                 "mean_private_public_gap": mean(gaps),
                 "private_stance_variance": (
                     pvariance(private_values) if len(private_values) > 1 else 0.0
@@ -40,6 +48,18 @@ def compute_event_timeseries(
                 ),
                 "mean_confidence": mean(state.confidence for state in states),
                 "mean_salience": mean(state.salience for state in states),
+                "mean_willingness_to_speak": mean(
+                    state.willingness_to_speak for state in states
+                ),
+                "silent_agent_count": silent_agent_count,
+                "silent_agent_rate": silent_agent_count / len(states),
+                "mean_perceived_majority": mean_perceived_majority,
+                "perceived_majority_error": abs(mean_perceived_majority - mean_private_stance),
+                "mean_fairness_concern": mean(state.fairness_concern for state in states),
+                "mean_trust_in_official_info": mean(
+                    state.trust_in_official_info for state in states
+                ),
+                "public_expression_bias": mean_public_stance - mean_private_stance,
                 "message_count": len(day_messages),
                 "private_message_count": sum(
                     1 for message in day_messages if message.recipient_agent_id is not None
@@ -92,6 +112,14 @@ def compute_event_metrics(
         "final_public_stance_variance": final["public_stance_variance"],
         "final_mean_confidence": final["mean_confidence"],
         "final_mean_salience": final["mean_salience"],
+        "final_mean_willingness_to_speak": final["mean_willingness_to_speak"],
+        "final_silent_agent_count": final["silent_agent_count"],
+        "final_silent_agent_rate": final["silent_agent_rate"],
+        "final_mean_perceived_majority": final["mean_perceived_majority"],
+        "final_perceived_majority_error": final["perceived_majority_error"],
+        "final_mean_fairness_concern": final["mean_fairness_concern"],
+        "final_mean_trust_in_official_info": final["mean_trust_in_official_info"],
+        "final_public_expression_bias": final["public_expression_bias"],
         "timeseries": rows,
     }
 

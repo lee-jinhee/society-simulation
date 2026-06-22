@@ -83,6 +83,12 @@ def _run_single_config(parser: argparse.ArgumentParser, config_path: str) -> int
         print(f"final_private_stance_mean={metrics['final_private_stance_mean']}")
         print(f"final_public_stance_mean={metrics['final_public_stance_mean']}")
         print(f"final_private_public_gap={metrics['final_private_public_gap']}")
+        if "final_silent_agent_rate" in metrics:
+            print(f"final_silent_agent_rate={metrics['final_silent_agent_rate']}")
+        if "final_public_expression_bias" in metrics:
+            print(f"final_public_expression_bias={metrics['final_public_expression_bias']}")
+        if "final_perceived_majority_error" in metrics:
+            print(f"final_perceived_majority_error={metrics['final_perceived_majority_error']}")
         print(f"message_count={metrics.get('message_count')}")
     else:
         print(f"action_counts={action_counts}")
