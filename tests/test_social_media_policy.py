@@ -3,7 +3,12 @@ import json
 import pytest
 
 from society_simulation.social_media_models import FeedItem, SocialMediaUserProfile, SocialMediaUserState
-from society_simulation.social_media_policy import MockSocialMediaPolicy, parse_social_action_content
+from society_simulation.social_media_policy import (
+    MockSocialMediaPolicy,
+    OpenAICompatibleSocialMediaPolicy,
+    build_social_media_prompt,
+    parse_social_action_content,
+)
 
 
 def _profile() -> SocialMediaUserProfile:
@@ -85,3 +90,123 @@ def test_mock_policy_can_do_nothing_on_empty_feed() -> None:
     action = policy.decide(profile=_profile(), state=_state(), feed=(), tick=1)
 
     assert action.action_type == "do_nothing"
+
+
+def test_social_media_prompt_does_not_reveal_experiment() -> None:
+    prompt = build_social_media_prompt(
+        profile=_profile(),
+        state=_state(),
+        feed=(),
+        recent_memories=(),
+    )
+
+    assert "simulating a social network experiment" not in prompt.lower()
+    assert "instagram-like app" in prompt.lower()
+
+
+def test_parse_create_post_action() -> None:
+    content = json.dumps(
+        {
+            "action_type": "create_post",
+            "post_id": None,
+            "target_user_id": None,
+            "text": "This feels like it will affect my commute.",
+            "topic": "transit",
+            "stance": -0.2,
+            "reason": "public concern",
+        }
+    )
+
+    action = parse_social_action_content(content, tick=3, user_id=1)
+
+    assert action.action_type == "create_post"
+    assert action.topic == "transit"
+
+
+def test_openai_compatible_social_policy_tracks_usage() -> None:
+    captured: dict[str, object] = {}
+
+    def transport(
+        url: str,
+        headers: dict[str, str],
+        payload: dict[str, object],
+        timeout_seconds: float,
+    ) -> dict[str, object]:
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["payload"] = payload
+        captured["timeout_seconds"] = timeout_seconds
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "action_type": "like_post",
+                                "post_id": "post-1",
+                                "target_user_id": None,
+                                "text": None,
+                                "topic": None,
+                                "stance": None,
+                                "reason": "visible signal",
+                            }
+                        )
+                    }
+                }
+            ],
+            "usage": {"prompt_tokens": 13, "completion_tokens": 5},
+        }
+
+    policy = OpenAICompatibleSocialMediaPolicy(
+        model="cheap-chat",
+        api_key="test-key",
+        base_url="https://example.test/v1",
+        input_cost_per_1m_tokens=1.0,
+        output_cost_per_1m_tokens=2.0,
+        transport=transport,
+    )
+
+    action = policy.decide(
+        profile=_profile(),
+        state=_state(),
+        feed=(FeedItem(1, 1, "post-1", 2, 1.0, 0, "following", "x"),),
+        tick=1,
+    )
+
+    assert action.action_type == "like_post"
+    assert captured["url"] == "https://example.test/v1/chat/completions"
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["model"] == "cheap-chat"
+    usage = policy.usage_summary()
+    assert usage["calls"] == 1
+    assert usage["prompt_tokens"] == 13
+    assert usage["completion_tokens"] == 5
+    assert usage["total_cost_usd"] == pytest.approx(23 / 1_000_000)
+
+
+def test_openai_compatible_social_policy_cost_cap_stops_before_call() -> None:
+    called = False
+
+    def transport(
+        url: str,
+        headers: dict[str, str],
+        payload: dict[str, object],
+        timeout_seconds: float,
+    ) -> dict[str, object]:
+        nonlocal called
+        called = True
+        return {}
+
+    policy = OpenAICompatibleSocialMediaPolicy(
+        model="cheap-chat",
+        api_key="test-key",
+        input_cost_per_1m_tokens=1_000_000.0,
+        max_estimated_cost_usd=0.01,
+        transport=transport,
+    )
+
+    with pytest.raises(ValueError, match="social media llm cost cap exceeded"):
+        policy.decide(profile=_profile(), state=_state(), feed=(), tick=1)
+
+    assert called is False

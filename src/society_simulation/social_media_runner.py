@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import os
 from pathlib import Path
 import random
 from typing import Any
@@ -18,6 +19,8 @@ from society_simulation.social_media_models import (
     SocialMediaWorld,
 )
 from society_simulation.social_media_policy import MockSocialMediaPolicy
+from society_simulation.social_media_policy import OpenAICompatibleSocialMediaPolicy
+from society_simulation.social_media_policy import SocialMediaPolicy
 from society_simulation.social_media_replay import SocialMediaReplayWriter
 from society_simulation.social_media_seed import build_initial_world
 
@@ -104,11 +107,39 @@ def run_instagram_social_dynamics(
     )
 
 
-def _build_policy(config: InstagramSocialDynamicsConfig) -> MockSocialMediaPolicy:
+def _build_policy(config: InstagramSocialDynamicsConfig) -> SocialMediaPolicy:
     policy_type = str(config.update_policy["type"])
     if policy_type == "mock_social":
         return MockSocialMediaPolicy(
             response_style=str(config.update_policy.get("response_style", "balanced")),
+        )
+    if policy_type == "llm":
+        api_key_env = str(config.update_policy.get("api_key_env", "OPENAI_API_KEY"))
+        api_key = os.environ.get(api_key_env)
+        if not api_key:
+            raise ValueError(f"{api_key_env} environment variable is required")
+        return OpenAICompatibleSocialMediaPolicy(
+            model=str(config.update_policy["model"]),
+            api_key=api_key,
+            provider=str(config.update_policy.get("provider", "openai_compatible")),
+            base_url=str(config.update_policy.get("base_url", "https://api.openai.com/v1")),
+            temperature=float(config.update_policy.get("temperature", 0.0)),
+            max_completion_tokens=int(config.update_policy.get("max_completion_tokens", 96)),
+            token_limit_parameter=str(
+                config.update_policy.get("token_limit_parameter", "max_completion_tokens")
+            ),
+            timeout_seconds=float(config.update_policy.get("timeout_seconds", 30.0)),
+            input_cost_per_1m_tokens=float(
+                config.update_policy.get("input_cost_per_1m_tokens", 0.0)
+            ),
+            output_cost_per_1m_tokens=float(
+                config.update_policy.get("output_cost_per_1m_tokens", 0.0)
+            ),
+            max_estimated_cost_usd=(
+                float(config.update_policy["max_estimated_cost_usd"])
+                if "max_estimated_cost_usd" in config.update_policy
+                else None
+            ),
         )
     raise ValueError("unsupported social media update_policy type")
 

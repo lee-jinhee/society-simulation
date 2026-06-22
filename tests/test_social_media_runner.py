@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from society_simulation.config import load_config
 from society_simulation.runner import run_experiment
 from society_simulation.social_media_runner import run_instagram_social_dynamics
@@ -40,3 +42,21 @@ def test_runner_dispatches_from_generic_run_experiment(tmp_path) -> None:
     result = run_experiment(config)
 
     assert "like_post" in result.metrics["action_counts"]
+
+
+def test_llm_policy_requires_configured_api_key_env(tmp_path, monkeypatch) -> None:
+    config_path = tmp_path / "config.json"
+    data = _config(tmp_path)
+    data["update_policy"] = {
+        "type": "llm",
+        "provider": "openai_compatible",
+        "model": "cheap-chat",
+        "api_key_env": "MISSING_SOCIAL_MEDIA_KEY",
+        "max_estimated_cost_usd": 1.0,
+    }
+    config_path.write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.delenv("MISSING_SOCIAL_MEDIA_KEY", raising=False)
+    config = load_config(config_path)
+
+    with pytest.raises(ValueError, match="MISSING_SOCIAL_MEDIA_KEY environment variable is required"):
+        run_instagram_social_dynamics(config)
