@@ -91,6 +91,24 @@ def test_write_sweep_artifacts_writes_manifest_csv_and_summary_json(
         "message_count",
         "agent_count",
         "day_count",
+        "experiment_family",
+        "user_count",
+        "post_count",
+        "feed_impression_count",
+        "action_count",
+        "like_count",
+        "dm_count",
+        "follow_count",
+        "unfollow_count",
+        "initial_follow_edge_count",
+        "final_follow_edge_count",
+        "follow_edge_delta",
+        "new_follow_edge_count",
+        "removed_follow_edge_count",
+        "final_stance_mean",
+        "final_stance_variance",
+        "exposure_diversity",
+        "states_recorded",
     ]
     assert rows[0]["run_id"] == planned_runs[0].run_id
     assert rows[0]["status"] == "completed"
@@ -313,3 +331,64 @@ def test_write_sweep_artifacts_includes_event_driven_opinion_metrics(
     assert summary["metric_means"]["message_count"] == 5.0
     assert summary["metric_means"]["agent_count"] == 8.0
     assert summary["metric_means"]["day_count"] == 7.0
+
+
+def test_write_sweep_artifacts_includes_instagram_social_metrics(
+    tmp_path: Path,
+) -> None:
+    sweep = parse_sweep_config(valid_sweep_dict(tmp_path))
+    planned_runs = expand_sweep(sweep)
+    records = (
+        SweepRunRecord(
+            run_id=planned_runs[0].run_id,
+            labels=planned_runs[0].labels,
+            experiment_name="instagram_social_dynamics",
+            output_dir=planned_runs[0].config["output_dir"],
+            status="completed",
+            error=None,
+            metrics={
+                "experiment_family": "instagram_social_dynamics",
+                "user_count": 12,
+                "post_count": 24,
+                "feed_impression_count": 192,
+                "action_count": 48,
+                "like_count": 20,
+                "dm_count": 7,
+                "follow_count": 5,
+                "unfollow_count": 2,
+                "initial_follow_edge_count": 40,
+                "final_follow_edge_count": 43,
+                "follow_edge_delta": 3,
+                "new_follow_edge_count": 5,
+                "removed_follow_edge_count": 2,
+                "final_stance_mean": 0.18,
+                "final_stance_variance": 0.09,
+                "exposure_diversity": 2.75,
+                "states_recorded": 60,
+            },
+        ),
+    )
+
+    paths = write_sweep_artifacts(sweep, planned_runs, records)
+
+    manifest_row = json.loads(paths.manifest_path.read_text(encoding="utf-8").splitlines()[0])
+    assert manifest_row["feed_impression_count"] == 192
+    assert manifest_row["follow_edge_delta"] == 3
+    assert manifest_row["exposure_diversity"] == 2.75
+
+    with paths.summary_csv_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        rows = list(reader)
+    assert "feed_impression_count" in (reader.fieldnames or [])
+    assert "follow_edge_delta" in (reader.fieldnames or [])
+    assert "exposure_diversity" in (reader.fieldnames or [])
+    assert rows[0]["feed_impression_count"] == "192"
+    assert rows[0]["follow_edge_delta"] == "3"
+    assert rows[0]["exposure_diversity"] == "2.75"
+
+    summary = json.loads(paths.summary_json_path.read_text(encoding="utf-8"))
+    assert summary["metric_means"]["feed_impression_count"] == 192.0
+    assert summary["metric_means"]["action_count"] == 48.0
+    assert summary["metric_means"]["follow_edge_delta"] == 3.0
+    assert summary["metric_means"]["final_stance_variance"] == 0.09
+    assert summary["metric_means"]["exposure_diversity"] == 2.75

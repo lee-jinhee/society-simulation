@@ -14,6 +14,7 @@ from society_simulation.sweep_analysis import (
     ToplineEntry,
     analyze_sweep,
 )
+from tests.test_social_media_config import valid_social_media_config
 
 
 SUMMARY_FIELDS = [
@@ -36,6 +37,39 @@ SUMMARY_FIELDS = [
     "mean_belief",
     "edge_disagreement_rate",
     "component_count",
+]
+SOCIAL_METRIC_FIELDS = [
+    "experiment_family",
+    "user_count",
+    "post_count",
+    "feed_impression_count",
+    "action_count",
+    "like_count",
+    "dm_count",
+    "follow_count",
+    "unfollow_count",
+    "initial_follow_edge_count",
+    "final_follow_edge_count",
+    "follow_edge_delta",
+    "new_follow_edge_count",
+    "removed_follow_edge_count",
+    "final_stance_mean",
+    "final_stance_variance",
+    "exposure_diversity",
+    "states_recorded",
+]
+SOCIAL_SUMMARY_FIELDS = [
+    "run_id",
+    "seed",
+    "feed_policy",
+    "topology",
+    "threshold",
+    "experiment_name",
+    "output_dir",
+    "status",
+    "error",
+    *SUMMARY_FIELDS[8:],
+    *SOCIAL_METRIC_FIELDS,
 ]
 
 
@@ -211,6 +245,194 @@ def write_analysis_fixture(tmp_path: Path) -> Path:
     return sweep_dir
 
 
+def write_social_analysis_fixture(tmp_path: Path) -> Path:
+    sweep_dir = tmp_path / "instagram_feed_policy_sweep"
+    sweep_dir.mkdir()
+    base_config = valid_social_media_config()
+    base_config["output_dir"] = str(sweep_dir / "ignored")
+    (sweep_dir / "sweep_config.json").write_text(
+        json.dumps(
+            {
+                "sweep_name": "instagram_feed_policy_sweep",
+                "base_config": base_config,
+                "factors": [
+                    {"name": "seed", "path": "seed", "values": [1, 2]},
+                    {
+                        "name": "feed_policy",
+                        "path": "feed_policy.type",
+                        "values": ["chronological_following", "engagement_ranked"],
+                    },
+                ],
+                "output_dir": str(sweep_dir),
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    rows = [
+        _social_summary_row(
+            sweep_dir,
+            run_id="seed-1__feed_policy-chronological_following",
+            seed="1",
+            feed_policy="chronological_following",
+            feed_impression_count="96",
+            action_count="10",
+            like_count="4",
+            dm_count="1",
+            follow_count="1",
+            unfollow_count="1",
+            final_follow_edge_count="40",
+            follow_edge_delta="0",
+            new_follow_edge_count="1",
+            removed_follow_edge_count="1",
+            final_stance_mean="0.10",
+            final_stance_variance="0.10",
+            exposure_diversity="1.0",
+            states_recorded="60",
+        ),
+        _social_summary_row(
+            sweep_dir,
+            run_id="seed-2__feed_policy-chronological_following",
+            seed="2",
+            feed_policy="chronological_following",
+            feed_impression_count="96",
+            action_count="12",
+            like_count="6",
+            dm_count="1",
+            follow_count="1",
+            unfollow_count="1",
+            final_follow_edge_count="40",
+            follow_edge_delta="0",
+            new_follow_edge_count="1",
+            removed_follow_edge_count="1",
+            final_stance_mean="0.14",
+            final_stance_variance="0.12",
+            exposure_diversity="1.2",
+            states_recorded="60",
+        ),
+        _social_summary_row(
+            sweep_dir,
+            run_id="seed-1__feed_policy-engagement_ranked",
+            seed="1",
+            feed_policy="engagement_ranked",
+            feed_impression_count="96",
+            action_count="20",
+            like_count="10",
+            dm_count="2",
+            follow_count="2",
+            unfollow_count="1",
+            final_follow_edge_count="41",
+            follow_edge_delta="1",
+            new_follow_edge_count="2",
+            removed_follow_edge_count="1",
+            final_stance_mean="0.20",
+            final_stance_variance="0.18",
+            exposure_diversity="2.0",
+            states_recorded="60",
+        ),
+        _social_summary_row(
+            sweep_dir,
+            run_id="seed-2__feed_policy-engagement_ranked",
+            seed="2",
+            feed_policy="engagement_ranked",
+            feed_impression_count="96",
+            action_count="22",
+            like_count="12",
+            dm_count="4",
+            follow_count="4",
+            unfollow_count="1",
+            final_follow_edge_count="43",
+            follow_edge_delta="3",
+            new_follow_edge_count="4",
+            removed_follow_edge_count="1",
+            final_stance_mean="0.24",
+            final_stance_variance="0.22",
+            exposure_diversity="2.2",
+            states_recorded="60",
+        ),
+    ]
+    with (sweep_dir / "summary.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=SOCIAL_SUMMARY_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+    (sweep_dir / "summary.json").write_text(
+        json.dumps(
+            {
+                "sweep_name": "instagram_feed_policy_sweep",
+                "runs": 4,
+                "completed": 4,
+                "failed": 0,
+                "metric_means": {},
+                "groups": {},
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with (sweep_dir / "manifest.jsonl").open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, sort_keys=True) + "\n")
+    return sweep_dir
+
+
+def _social_summary_row(
+    sweep_dir: Path,
+    *,
+    run_id: str,
+    seed: str,
+    feed_policy: str,
+    feed_impression_count: str,
+    action_count: str,
+    like_count: str,
+    dm_count: str,
+    follow_count: str,
+    unfollow_count: str,
+    final_follow_edge_count: str,
+    follow_edge_delta: str,
+    new_follow_edge_count: str,
+    removed_follow_edge_count: str,
+    final_stance_mean: str,
+    final_stance_variance: str,
+    exposure_diversity: str,
+    states_recorded: str,
+) -> dict[str, str]:
+    row = {field: "" for field in SOCIAL_SUMMARY_FIELDS}
+    row.update(
+        {
+            "run_id": run_id,
+            "seed": seed,
+            "topology": "",
+            "threshold": "",
+            "feed_policy": feed_policy,
+            "experiment_name": "instagram_social_dynamics",
+            "output_dir": str(sweep_dir / "runs" / run_id),
+            "status": "completed",
+            "error": "",
+            "experiment_family": "instagram_social_dynamics",
+            "user_count": "12",
+            "post_count": "24",
+            "feed_impression_count": feed_impression_count,
+            "action_count": action_count,
+            "like_count": like_count,
+            "dm_count": dm_count,
+            "follow_count": follow_count,
+            "unfollow_count": unfollow_count,
+            "initial_follow_edge_count": "40",
+            "final_follow_edge_count": final_follow_edge_count,
+            "follow_edge_delta": follow_edge_delta,
+            "new_follow_edge_count": new_follow_edge_count,
+            "removed_follow_edge_count": removed_follow_edge_count,
+            "final_stance_mean": final_stance_mean,
+            "final_stance_variance": final_stance_variance,
+            "exposure_diversity": exposure_diversity,
+            "states_recorded": states_recorded,
+        }
+    )
+    return row
+
+
 def group_by(result, factor_name: str, value: str):
     for group in result.group_summaries:
         if group.factor_name == factor_name and group.value == value:
@@ -250,6 +472,23 @@ def test_sweep_analysis_dataclasses_match_task_api() -> None:
         "mean_time_to_consensus",
         "mean_opinion_variance",
         "mean_component_count",
+        "mean_user_count",
+        "mean_post_count",
+        "mean_feed_impression_count",
+        "mean_action_count",
+        "mean_like_count",
+        "mean_dm_count",
+        "mean_follow_count",
+        "mean_unfollow_count",
+        "mean_initial_follow_edge_count",
+        "mean_final_follow_edge_count",
+        "mean_follow_edge_delta",
+        "mean_new_follow_edge_count",
+        "mean_removed_follow_edge_count",
+        "mean_final_stance_mean",
+        "mean_final_stance_variance",
+        "mean_exposure_diversity",
+        "mean_states_recorded",
     )
     assert field_names(IncompleteRun) == ("run_id", "status", "error", "output_dir")
     assert field_names(ToplineEntry) == ("name", "factor_name", "value", "metric_value")
@@ -315,6 +554,46 @@ def test_analyze_sweep_computes_grouped_metrics_and_toplines(tmp_path: Path) -> 
     assert result.toplines["highest_edge_disagreement"].value == "cycle"
     assert [run.status for run in result.incomplete_runs] == ["failed", "pending"]
     assert result.incomplete_runs[0].to_dict()["error"] == "boom"
+
+
+def test_analyze_sweep_computes_instagram_social_group_metrics_and_toplines(
+    tmp_path: Path,
+) -> None:
+    sweep_dir = write_social_analysis_fixture(tmp_path)
+
+    result = analyze_sweep(sweep_dir)
+
+    assert result.sweep_name == "instagram_feed_policy_sweep"
+    assert result.factor_names == ("seed", "feed_policy")
+    engagement = group_by(result, "feed_policy", "engagement_ranked")
+    assert engagement.runs == 2
+    assert engagement.completed == 2
+    assert engagement.failed == 0
+    assert engagement.mean_action_count == pytest.approx(21.0)
+    assert engagement.mean_like_count == pytest.approx(11.0)
+    assert engagement.mean_dm_count == pytest.approx(3.0)
+    assert engagement.mean_follow_count == pytest.approx(3.0)
+    assert engagement.mean_follow_edge_delta == pytest.approx(2.0)
+    assert engagement.mean_new_follow_edge_count == pytest.approx(3.0)
+    assert engagement.mean_removed_follow_edge_count == pytest.approx(1.0)
+    assert engagement.mean_final_follow_edge_count == pytest.approx(42.0)
+    assert engagement.mean_final_stance_mean == pytest.approx(0.22)
+    assert engagement.mean_final_stance_variance == pytest.approx(0.20)
+    assert engagement.mean_exposure_diversity == pytest.approx(2.1)
+    assert engagement.metric("mean_exposure_diversity") == pytest.approx(2.1)
+
+    chronological = group_by(result, "feed_policy", "chronological_following")
+    assert chronological.mean_action_count == pytest.approx(11.0)
+    assert chronological.mean_follow_edge_delta == pytest.approx(0.0)
+    assert chronological.mean_exposure_diversity == pytest.approx(1.1)
+
+    assert result.toplines["highest_action_count"].factor_name == "feed_policy"
+    assert result.toplines["highest_action_count"].value == "engagement_ranked"
+    assert result.toplines["highest_like_count"].value == "engagement_ranked"
+    assert result.toplines["highest_dm_count"].value == "engagement_ranked"
+    assert result.toplines["highest_follow_edge_delta"].value == "engagement_ranked"
+    assert result.toplines["highest_exposure_diversity"].value == "engagement_ranked"
+    assert result.toplines["highest_final_stance_variance"].value == "engagement_ranked"
 
 
 def test_analyze_sweep_rejects_missing_required_file(tmp_path: Path) -> None:

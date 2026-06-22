@@ -21,6 +21,23 @@ GROUP_SUMMARY_FIELDS = (
     "mean_time_to_consensus",
     "mean_opinion_variance",
     "mean_component_count",
+    "mean_user_count",
+    "mean_post_count",
+    "mean_feed_impression_count",
+    "mean_action_count",
+    "mean_like_count",
+    "mean_dm_count",
+    "mean_follow_count",
+    "mean_unfollow_count",
+    "mean_initial_follow_edge_count",
+    "mean_final_follow_edge_count",
+    "mean_follow_edge_delta",
+    "mean_new_follow_edge_count",
+    "mean_removed_follow_edge_count",
+    "mean_final_stance_mean",
+    "mean_final_stance_variance",
+    "mean_exposure_diversity",
+    "mean_states_recorded",
 )
 FAILURE_FIELDS = ("run_id", "status", "error", "output_dir")
 
@@ -32,6 +49,23 @@ _GROUP_METRIC_FIELDS = (
     "mean_time_to_consensus",
     "mean_opinion_variance",
     "mean_component_count",
+    "mean_user_count",
+    "mean_post_count",
+    "mean_feed_impression_count",
+    "mean_action_count",
+    "mean_like_count",
+    "mean_dm_count",
+    "mean_follow_count",
+    "mean_unfollow_count",
+    "mean_initial_follow_edge_count",
+    "mean_final_follow_edge_count",
+    "mean_follow_edge_delta",
+    "mean_new_follow_edge_count",
+    "mean_removed_follow_edge_count",
+    "mean_final_stance_mean",
+    "mean_final_stance_variance",
+    "mean_exposure_diversity",
+    "mean_states_recorded",
 )
 _REPORT_GROUP_METRIC_FIELDS = (
     "consensus_rate",
@@ -39,16 +73,40 @@ _REPORT_GROUP_METRIC_FIELDS = (
     "mean_polarization_index",
     "mean_edge_disagreement_rate",
 )
+_REPORT_SOCIAL_METRIC_FIELDS = (
+    "mean_feed_impression_count",
+    "mean_action_count",
+    "mean_like_count",
+    "mean_dm_count",
+    "mean_follow_edge_delta",
+    "mean_final_stance_variance",
+    "mean_exposure_diversity",
+)
 _TOPLINE_LABELS = {
     "highest_consensus_rate": "Highest consensus rate",
     "highest_polarization": "Highest polarization",
     "highest_edge_disagreement": "Highest edge disagreement",
+    "highest_action_count": "Highest action count",
+    "highest_like_count": "Highest like count",
+    "highest_dm_count": "Highest DM count",
+    "highest_follow_edge_delta": "Highest follow edge delta",
+    "highest_exposure_diversity": "Highest exposure diversity",
+    "highest_final_stance_variance": "Highest final stance variance",
 }
-_TOPLINE_ORDER = (
+_NETWORK_TOPLINE_ORDER = (
     "highest_consensus_rate",
     "highest_polarization",
     "highest_edge_disagreement",
 )
+_SOCIAL_TOPLINE_ORDER = (
+    "highest_action_count",
+    "highest_like_count",
+    "highest_dm_count",
+    "highest_follow_edge_delta",
+    "highest_exposure_diversity",
+    "highest_final_stance_variance",
+)
+_TOPLINE_ORDER = (*_NETWORK_TOPLINE_ORDER, *_SOCIAL_TOPLINE_ORDER)
 
 
 @dataclass(frozen=True)
@@ -89,40 +147,85 @@ def _write_report(path: Path, result: SweepAnalysisResult) -> None:
         "",
         "## Topline",
     ]
+    has_social_metrics = _has_social_metrics(result)
     for topline_name in _TOPLINE_ORDER:
+        if topline_name not in result.toplines and (
+            has_social_metrics or topline_name in _SOCIAL_TOPLINE_ORDER
+        ):
+            continue
         lines.append(_topline_report_line(result, topline_name))
 
-    lines.extend(["", "## Factor Summaries"])
-    for factor_name in result.factor_names:
-        lines.extend(
-            [
-                "",
-                f"### {_markdown_cell(factor_name)}",
-                "",
-                (
-                    "| value | runs | completed | failed | consensus_rate | "
-                    "mean_final_a_fraction | mean_polarization_index | "
-                    "mean_edge_disagreement_rate |"
-                ),
-                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
-            ]
-        )
-        for group in result.group_summaries:
-            if group.factor_name != factor_name:
-                continue
-            lines.append(
-                "| "
-                + " | ".join(
-                    [
-                        _markdown_cell(group.value),
-                        str(group.runs),
-                        str(group.completed),
-                        str(group.failed),
-                        *(_format_numeric(getattr(group, field)) for field in _REPORT_GROUP_METRIC_FIELDS),
-                    ]
-                )
-                + " |"
+    if _has_network_report_metrics(result) or not has_social_metrics:
+        lines.extend(["", "## Factor Summaries"])
+        for factor_name in result.factor_names:
+            lines.extend(
+                [
+                    "",
+                    f"### {_markdown_cell(factor_name)}",
+                    "",
+                    (
+                        "| value | runs | completed | failed | consensus_rate | "
+                        "mean_final_a_fraction | mean_polarization_index | "
+                        "mean_edge_disagreement_rate |"
+                    ),
+                    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                ]
             )
+            for group in result.group_summaries:
+                if group.factor_name != factor_name:
+                    continue
+                lines.append(
+                    "| "
+                    + " | ".join(
+                        [
+                            _markdown_cell(group.value),
+                            str(group.runs),
+                            str(group.completed),
+                            str(group.failed),
+                            *(
+                                _format_numeric(getattr(group, field))
+                                for field in _REPORT_GROUP_METRIC_FIELDS
+                            ),
+                        ]
+                    )
+                    + " |"
+                )
+
+    if has_social_metrics:
+        lines.extend(["", "## Social Media Metrics"])
+        for factor_name in result.factor_names:
+            lines.extend(
+                [
+                    "",
+                    f"### {_markdown_cell(factor_name)}",
+                    "",
+                    (
+                        "| value | runs | completed | failed | "
+                        + " | ".join(_REPORT_SOCIAL_METRIC_FIELDS)
+                        + " |"
+                    ),
+                    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+                ]
+            )
+            for group in result.group_summaries:
+                if group.factor_name != factor_name:
+                    continue
+                lines.append(
+                    "| "
+                    + " | ".join(
+                        [
+                            _markdown_cell(group.value),
+                            str(group.runs),
+                            str(group.completed),
+                            str(group.failed),
+                            *(
+                                _format_numeric(getattr(group, field))
+                                for field in _REPORT_SOCIAL_METRIC_FIELDS
+                            ),
+                        ]
+                    )
+                    + " |"
+                )
 
     lines.extend(["", "## Failures"])
     if not result.incomplete_runs:
@@ -206,6 +309,22 @@ def _topline_report_line(result: SweepAnalysisResult, topline_name: str) -> str:
     return (
         f"- {label}: {_markdown_cell(topline.factor_name)}={_markdown_cell(topline.value)} "
         f"({_format_numeric(topline.metric_value)})"
+    )
+
+
+def _has_social_metrics(result: SweepAnalysisResult) -> bool:
+    return any(
+        getattr(group, field) is not None
+        for group in result.group_summaries
+        for field in _REPORT_SOCIAL_METRIC_FIELDS
+    )
+
+
+def _has_network_report_metrics(result: SweepAnalysisResult) -> bool:
+    return any(
+        getattr(group, field) is not None
+        for group in result.group_summaries
+        for field in _REPORT_GROUP_METRIC_FIELDS
     )
 
 

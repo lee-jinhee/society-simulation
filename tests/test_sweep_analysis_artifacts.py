@@ -8,7 +8,7 @@ from society_simulation.sweep_analysis_artifacts import (
     SweepAnalysisArtifactPaths,
     write_analysis_artifacts,
 )
-from tests.test_sweep_analysis import write_analysis_fixture
+from tests.test_sweep_analysis import write_analysis_fixture, write_social_analysis_fixture
 
 
 EXPECTED_GROUP_SUMMARY_FIELDS = [
@@ -24,8 +24,44 @@ EXPECTED_GROUP_SUMMARY_FIELDS = [
     "mean_time_to_consensus",
     "mean_opinion_variance",
     "mean_component_count",
+    "mean_user_count",
+    "mean_post_count",
+    "mean_feed_impression_count",
+    "mean_action_count",
+    "mean_like_count",
+    "mean_dm_count",
+    "mean_follow_count",
+    "mean_unfollow_count",
+    "mean_initial_follow_edge_count",
+    "mean_final_follow_edge_count",
+    "mean_follow_edge_delta",
+    "mean_new_follow_edge_count",
+    "mean_removed_follow_edge_count",
+    "mean_final_stance_mean",
+    "mean_final_stance_variance",
+    "mean_exposure_diversity",
+    "mean_states_recorded",
 ]
 EXPECTED_FAILURE_FIELDS = ["run_id", "status", "error", "output_dir"]
+EXPECTED_EMPTY_SOCIAL_GROUP_METRICS = {
+    "mean_user_count": "",
+    "mean_post_count": "",
+    "mean_feed_impression_count": "",
+    "mean_action_count": "",
+    "mean_like_count": "",
+    "mean_dm_count": "",
+    "mean_follow_count": "",
+    "mean_unfollow_count": "",
+    "mean_initial_follow_edge_count": "",
+    "mean_final_follow_edge_count": "",
+    "mean_follow_edge_delta": "",
+    "mean_new_follow_edge_count": "",
+    "mean_removed_follow_edge_count": "",
+    "mean_final_stance_mean": "",
+    "mean_final_stance_variance": "",
+    "mean_exposure_diversity": "",
+    "mean_states_recorded": "",
+}
 
 
 def field_names(dataclass_type) -> tuple[str, ...]:
@@ -136,6 +172,7 @@ def test_group_summary_csv_fields_order_and_numeric_formatting(
         "mean_time_to_consensus": "1.0000",
         "mean_opinion_variance": "0.1250",
         "mean_component_count": "1.0000",
+        **EXPECTED_EMPTY_SOCIAL_GROUP_METRICS,
     }
     assert rows[3] == {
         "factor": "topology",
@@ -150,6 +187,7 @@ def test_group_summary_csv_fields_order_and_numeric_formatting(
         "mean_time_to_consensus": "",
         "mean_opinion_variance": "0.2500",
         "mean_component_count": "1.0000",
+        **EXPECTED_EMPTY_SOCIAL_GROUP_METRICS,
     }
 
 
@@ -190,6 +228,51 @@ def test_group_summary_json_contains_native_values_from_analysis_result(
     assert payload["toplines"]["highest_polarization"]["metric_value"] == 0.6
     assert [run["status"] for run in payload["incomplete_runs"]] == ["failed", "pending"]
     assert payload["incomplete_runs"][0]["error"] == "boom"
+
+
+def test_write_analysis_artifacts_reports_instagram_social_metrics(
+    tmp_path: Path,
+) -> None:
+    paths = write_analysis_artifacts(analyze_sweep(write_social_analysis_fixture(tmp_path)))
+
+    report = paths.report_path.read_text(encoding="utf-8")
+    assert "- Highest consensus rate: no completed metric data" not in report
+    assert "- Highest polarization: no completed metric data" not in report
+    assert "- Highest edge disagreement: no completed metric data" not in report
+    assert "mean_final_a_fraction" not in report
+    assert "- Highest action count: feed_policy=engagement_ranked (21.0000)" in report
+    assert "- Highest exposure diversity: feed_policy=engagement_ranked (2.1000)" in report
+    assert "## Social Media Metrics" in report
+    assert "### feed_policy" in report
+    assert (
+        "| value | runs | completed | failed | mean_feed_impression_count | "
+        "mean_action_count | mean_like_count | mean_dm_count | "
+        "mean_follow_edge_delta | mean_final_stance_variance | "
+        "mean_exposure_diversity |"
+    ) in report
+    assert (
+        "| engagement_ranked | 2 | 2 | 0 | 96.0000 | 21.0000 | "
+        "11.0000 | 3.0000 | 2.0000 | 0.2000 | 2.1000 |"
+    ) in report
+
+    with paths.group_summary_csv_path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    engagement = next(
+        row
+        for row in rows
+        if row["factor"] == "feed_policy" and row["value"] == "engagement_ranked"
+    )
+    assert engagement["mean_action_count"] == "21.0000"
+    assert engagement["mean_like_count"] == "11.0000"
+    assert engagement["mean_follow_edge_delta"] == "2.0000"
+    assert engagement["mean_exposure_diversity"] == "2.1000"
+
+    payload = json.loads(paths.group_summary_json_path.read_text(encoding="utf-8"))
+    assert (
+        payload["groups"]["feed_policy"]["engagement_ranked"]["mean_exposure_diversity"]
+        == 2.1
+    )
+    assert payload["toplines"]["highest_action_count"]["value"] == "engagement_ranked"
 
 
 def test_failure_summary_csv_includes_failed_and_pending_rows_in_order(

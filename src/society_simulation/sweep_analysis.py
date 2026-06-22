@@ -33,6 +33,23 @@ NUMERIC_MEAN_FIELDS = (
     "opinion_variance",
     "edge_disagreement_rate",
     "component_count",
+    "user_count",
+    "post_count",
+    "feed_impression_count",
+    "action_count",
+    "like_count",
+    "dm_count",
+    "follow_count",
+    "unfollow_count",
+    "initial_follow_edge_count",
+    "final_follow_edge_count",
+    "follow_edge_delta",
+    "new_follow_edge_count",
+    "removed_follow_edge_count",
+    "final_stance_mean",
+    "final_stance_variance",
+    "exposure_diversity",
+    "states_recorded",
 )
 GROUP_SUMMARY_METRICS = (
     "consensus_rate",
@@ -42,6 +59,23 @@ GROUP_SUMMARY_METRICS = (
     "mean_time_to_consensus",
     "mean_opinion_variance",
     "mean_component_count",
+    "mean_user_count",
+    "mean_post_count",
+    "mean_feed_impression_count",
+    "mean_action_count",
+    "mean_like_count",
+    "mean_dm_count",
+    "mean_follow_count",
+    "mean_unfollow_count",
+    "mean_initial_follow_edge_count",
+    "mean_final_follow_edge_count",
+    "mean_follow_edge_delta",
+    "mean_new_follow_edge_count",
+    "mean_removed_follow_edge_count",
+    "mean_final_stance_mean",
+    "mean_final_stance_variance",
+    "mean_exposure_diversity",
+    "mean_states_recorded",
 )
 MANIFEST_COMPARE_FIELDS = ("run_id", "status", "error", "output_dir")
 
@@ -60,6 +94,23 @@ class GroupSummary:
     mean_time_to_consensus: float | None
     mean_opinion_variance: float | None
     mean_component_count: float | None
+    mean_user_count: float | None
+    mean_post_count: float | None
+    mean_feed_impression_count: float | None
+    mean_action_count: float | None
+    mean_like_count: float | None
+    mean_dm_count: float | None
+    mean_follow_count: float | None
+    mean_unfollow_count: float | None
+    mean_initial_follow_edge_count: float | None
+    mean_final_follow_edge_count: float | None
+    mean_follow_edge_delta: float | None
+    mean_new_follow_edge_count: float | None
+    mean_removed_follow_edge_count: float | None
+    mean_final_stance_mean: float | None
+    mean_final_stance_variance: float | None
+    mean_exposure_diversity: float | None
+    mean_states_recorded: float | None
 
     def metric(self, name: str) -> float | None:
         if name not in GROUP_SUMMARY_METRICS:
@@ -80,6 +131,23 @@ class GroupSummary:
             "mean_time_to_consensus": self.mean_time_to_consensus,
             "mean_opinion_variance": self.mean_opinion_variance,
             "mean_component_count": self.mean_component_count,
+            "mean_user_count": self.mean_user_count,
+            "mean_post_count": self.mean_post_count,
+            "mean_feed_impression_count": self.mean_feed_impression_count,
+            "mean_action_count": self.mean_action_count,
+            "mean_like_count": self.mean_like_count,
+            "mean_dm_count": self.mean_dm_count,
+            "mean_follow_count": self.mean_follow_count,
+            "mean_unfollow_count": self.mean_unfollow_count,
+            "mean_initial_follow_edge_count": self.mean_initial_follow_edge_count,
+            "mean_final_follow_edge_count": self.mean_final_follow_edge_count,
+            "mean_follow_edge_delta": self.mean_follow_edge_delta,
+            "mean_new_follow_edge_count": self.mean_new_follow_edge_count,
+            "mean_removed_follow_edge_count": self.mean_removed_follow_edge_count,
+            "mean_final_stance_mean": self.mean_final_stance_mean,
+            "mean_final_stance_variance": self.mean_final_stance_variance,
+            "mean_exposure_diversity": self.mean_exposure_diversity,
+            "mean_states_recorded": self.mean_states_recorded,
         }
 
 
@@ -328,6 +396,23 @@ def _group_summary(
         mean_time_to_consensus=metric_means.get("time_to_consensus"),
         mean_opinion_variance=metric_means.get("opinion_variance"),
         mean_component_count=metric_means.get("component_count"),
+        mean_user_count=metric_means.get("user_count"),
+        mean_post_count=metric_means.get("post_count"),
+        mean_feed_impression_count=metric_means.get("feed_impression_count"),
+        mean_action_count=metric_means.get("action_count"),
+        mean_like_count=metric_means.get("like_count"),
+        mean_dm_count=metric_means.get("dm_count"),
+        mean_follow_count=metric_means.get("follow_count"),
+        mean_unfollow_count=metric_means.get("unfollow_count"),
+        mean_initial_follow_edge_count=metric_means.get("initial_follow_edge_count"),
+        mean_final_follow_edge_count=metric_means.get("final_follow_edge_count"),
+        mean_follow_edge_delta=metric_means.get("follow_edge_delta"),
+        mean_new_follow_edge_count=metric_means.get("new_follow_edge_count"),
+        mean_removed_follow_edge_count=metric_means.get("removed_follow_edge_count"),
+        mean_final_stance_mean=metric_means.get("final_stance_mean"),
+        mean_final_stance_variance=metric_means.get("final_stance_variance"),
+        mean_exposure_diversity=metric_means.get("exposure_diversity"),
+        mean_states_recorded=metric_means.get("states_recorded"),
     )
 
 
@@ -335,7 +420,7 @@ def _metric_means(rows: list[dict[str, str]]) -> dict[str, float]:
     means: dict[str, float] = {}
     completed_rows = [row for row in rows if row["status"] == "completed"]
     for field in NUMERIC_MEAN_FIELDS:
-        values = [_parse_float(row[field]) for row in completed_rows]
+        values = [_parse_float(row.get(field)) for row in completed_rows]
         numeric_values = [value for value in values if value is not None]
         if numeric_values:
             means[field] = sum(numeric_values) / len(numeric_values)
@@ -379,6 +464,54 @@ def _toplines(group_summaries: list[GroupSummary]) -> dict[str, ToplineEntry]:
     )
     if edge_disagreement is not None:
         toplines["highest_edge_disagreement"] = edge_disagreement
+
+    action_count = _highest_topline(
+        group_summaries,
+        name="highest_action_count",
+        metric_value=lambda group: group.mean_action_count,
+    )
+    if action_count is not None:
+        toplines["highest_action_count"] = action_count
+
+    like_count = _highest_topline(
+        group_summaries,
+        name="highest_like_count",
+        metric_value=lambda group: group.mean_like_count,
+    )
+    if like_count is not None:
+        toplines["highest_like_count"] = like_count
+
+    dm_count = _highest_topline(
+        group_summaries,
+        name="highest_dm_count",
+        metric_value=lambda group: group.mean_dm_count,
+    )
+    if dm_count is not None:
+        toplines["highest_dm_count"] = dm_count
+
+    follow_delta = _highest_topline(
+        group_summaries,
+        name="highest_follow_edge_delta",
+        metric_value=lambda group: group.mean_follow_edge_delta,
+    )
+    if follow_delta is not None:
+        toplines["highest_follow_edge_delta"] = follow_delta
+
+    exposure_diversity = _highest_topline(
+        group_summaries,
+        name="highest_exposure_diversity",
+        metric_value=lambda group: group.mean_exposure_diversity,
+    )
+    if exposure_diversity is not None:
+        toplines["highest_exposure_diversity"] = exposure_diversity
+
+    stance_variance = _highest_topline(
+        group_summaries,
+        name="highest_final_stance_variance",
+        metric_value=lambda group: group.mean_final_stance_variance,
+    )
+    if stance_variance is not None:
+        toplines["highest_final_stance_variance"] = stance_variance
     return toplines
 
 
