@@ -13,8 +13,8 @@ reasons.
 The run completed 44 GPT-5.4 mini social-media decisions across 8 synthetic
 users and 8 ticks. The configured cost accounting used `$0.75` per 1M input
 tokens and `$4.50` per 1M output tokens, with a `$0.20` run cap. Observed usage
-was 17,932 prompt tokens and 2,822 completion tokens, for an estimated cost of
-`$0.026148`.
+was 18,593 prompt tokens and 2,722 completion tokens, for an estimated cost of
+`$0.02619375`.
 
 The pilot produced a useful but clearly preliminary result. The simulator
 expressed paid delivery, frequency capping, ad-specific likes, and organic
@@ -80,9 +80,10 @@ seen-before count.
 
 ## Engineering Changes During the Pilot
 
-The first paid attempt failed before replay writing because an LLM response used
-a non-integer optional field where the parser expected `target_user_id` to be an
-integer. Investigation found a real interface bug: the prompt required integer
+The first paid attempts failed before replay writing because LLM responses used
+non-integer optional fields where the parser expected numeric values. One
+response used a non-integer `target_user_id`; another used a nonnumeric
+`stance`. Investigation found a real interface bug: the prompt required integer
 `target_user_id`, but feed lines only showed `@handle`, not `author_id`.
 
 We fixed this before the successful run:
@@ -93,6 +94,8 @@ We fixed this before the successful run:
 - optional fields are normalized when the LLM returns common null strings such
   as `"none"`, `"null"`, or `"N/A"`;
 - optional numeric fields accept numeric strings such as `"2"` and `"0.25"`.
+- irrelevant optional fields are ignored for actions that do not use them, while
+  `create_post` still requires a numeric stance when stance is provided.
 
 This was not just a convenience patch. It made the action contract executable:
 the model can only emit valid integer targets if the prompt actually exposes
@@ -105,11 +108,11 @@ integer targets.
 | metric | value |
 |---|---:|
 | LLM calls | 44 |
-| prompt tokens | 17,932 |
-| completion tokens | 2,822 |
-| input cost | `$0.013449` |
-| output cost | `$0.012699` |
-| total estimated cost | `$0.026148` |
+| prompt tokens | 18,593 |
+| completion tokens | 2,722 |
+| input cost | `$0.01394475` |
+| output cost | `$0.012249` |
+| total estimated cost | `$0.02619375` |
 | configured cap | `$0.20` |
 | successful replay writes | 1 |
 

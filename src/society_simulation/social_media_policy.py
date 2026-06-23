@@ -53,16 +53,31 @@ def parse_social_action_content(content: str, *, tick: int, user_id: int) -> Pla
     if not isinstance(data, dict):
         raise ValueError("social llm response content must be a JSON object")
     action_type = _require_action_type(data.get("action_type"))
+    reason = _require_str(data.get("reason"), "reason")
+    post_id = _optional_str(data.get("post_id"), "post_id")
+    target_user_id = _optional_int(data.get("target_user_id"), "target_user_id")
+    text = _optional_str(data.get("text"), "text")
+    topic = _optional_str(data.get("topic"), "topic")
+    if action_type in ("like_post", "follow_user", "unfollow_user", "do_nothing"):
+        text = None
+        topic = None
+        stance = None
+    else:
+        stance = _optional_float(data.get("stance"), "stance")
+    if action_type in ("like_post", "create_post", "do_nothing"):
+        target_user_id = None
+    if action_type in ("follow_user", "unfollow_user", "send_dm", "create_post", "do_nothing"):
+        post_id = None if action_type in ("create_post", "do_nothing") else post_id
     return PlatformAction(
         tick=tick,
         user_id=user_id,
         action_type=action_type,
-        post_id=_optional_str(data.get("post_id"), "post_id"),
-        target_user_id=_optional_int(data.get("target_user_id"), "target_user_id"),
-        text=_optional_str(data.get("text"), "text"),
-        topic=_optional_str(data.get("topic"), "topic"),
-        stance=_optional_float(data.get("stance"), "stance"),
-        reason=_require_str(data.get("reason"), "reason"),
+        post_id=post_id,
+        target_user_id=target_user_id,
+        text=text,
+        topic=topic,
+        stance=stance,
+        reason=reason,
     )
 
 
@@ -262,7 +277,8 @@ def build_social_media_prompt(
         "stance, and reason. action_type must be one of like_post, follow_user, "
         "unfollow_user, send_dm, create_post, do_nothing. For follow_user, unfollow_user, "
         "or send_dm, target_user_id must be the integer author_id from the feed. Use null, "
-        'not strings like "none" or "N/A", for unused optional fields.'
+        'not strings like "none" or "N/A", for unused optional fields. stance must be null '
+        "or a numeric value between -1 and 1."
     )
 
 

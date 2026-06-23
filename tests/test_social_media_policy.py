@@ -114,6 +114,43 @@ def test_parse_accepts_numeric_strings_for_optional_numeric_fields() -> None:
     assert action.stance == 0.25
 
 
+def test_parse_ignores_irrelevant_non_numeric_stance_for_like_action() -> None:
+    content = json.dumps(
+        {
+            "action_type": "like_post",
+            "post_id": "post-1",
+            "target_user_id": None,
+            "text": None,
+            "topic": None,
+            "stance": "positive",
+            "reason": "visible signal",
+        }
+    )
+
+    action = parse_social_action_content(content, tick=2, user_id=1)
+
+    assert action.action_type == "like_post"
+    assert action.post_id == "post-1"
+    assert action.stance is None
+
+
+def test_parse_rejects_non_numeric_stance_for_create_post() -> None:
+    content = json.dumps(
+        {
+            "action_type": "create_post",
+            "post_id": None,
+            "target_user_id": None,
+            "text": "I might check this out.",
+            "topic": "coffee",
+            "stance": "positive",
+            "reason": "public interest",
+        }
+    )
+
+    with pytest.raises(ValueError, match="stance must be a number"):
+        parse_social_action_content(content, tick=2, user_id=1)
+
+
 def test_mock_policy_likes_high_engagement_feed_item() -> None:
     policy = MockSocialMediaPolicy(response_style="balanced")
     feed = (
