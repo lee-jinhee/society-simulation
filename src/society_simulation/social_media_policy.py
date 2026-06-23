@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 import copy
 import json
+from math import isfinite
 import time
 from typing import Protocol
 
@@ -259,7 +260,9 @@ def build_social_media_prompt(
         f"Visible feed:\n{feed_text}\n\n"
         "Return only JSON with keys action_type, post_id, target_user_id, text, topic, "
         "stance, and reason. action_type must be one of like_post, follow_user, "
-        "unfollow_user, send_dm, create_post, do_nothing."
+        "unfollow_user, send_dm, create_post, do_nothing. For follow_user, unfollow_user, "
+        "or send_dm, target_user_id must be the integer author_id from the feed. Use null, "
+        'not strings like "none" or "N/A", for unused optional fields.'
     )
 
 
@@ -273,7 +276,7 @@ def _feed_prompt_line(item: FeedItem) -> str:
         )
     return (
         f"- rank={item.rank} @{item.author_handle or item.author_id} "
-        f"post_id={item.post_id} topic={item.topic or 'unknown'} "
+        f"author_id={item.author_id} post_id={item.post_id} topic={item.topic or 'unknown'} "
         f"likes={item.visible_like_count} likes source={item.source}{ad_facts} "
         f"text={item.text or '[no text]'}"
     )
@@ -435,25 +438,46 @@ def _require_str(value: object, field: str) -> str:
 
 
 def _optional_str(value: object, field: str) -> str | None:
-    if value is None:
+    if _is_nullish(value):
         return None
     return _require_str(value, field)
 
 
 def _optional_int(value: object, field: str) -> int | None:
-    if value is None:
+    if _is_nullish(value):
         return None
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{field} must be an integer")
     return value
 
 
 def _optional_float(value: object, field: str) -> float | None:
-    if value is None:
+    if _is_nullish(value):
         return None
+    if isinstance(value, str):
+        try:
+            parsed = float(value.strip())
+        except ValueError as exc:
+            raise ValueError(f"{field} must be a number") from exc
+        if not isfinite(parsed):
+            raise ValueError(f"{field} must be a number")
+        return parsed
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{field} must be a number")
-    return float(value)
+    parsed = float(value)
+    if not isfinite(parsed):
+        raise ValueError(f"{field} must be a number")
+    return parsed
+
+
+def _is_nullish(value: object) -> bool:
+    if value is None:
+        return True
+    if not isinstance(value, str):
+        return False
+    return value.strip().lower() in {"", "none", "null", "n/a", "na"}
 
 
 def _messages_text(messages: list[dict[str, str]]) -> str:

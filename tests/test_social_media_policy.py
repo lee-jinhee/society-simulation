@@ -72,6 +72,48 @@ def test_parse_rejects_unknown_action() -> None:
         parse_social_action_content(content, tick=2, user_id=1)
 
 
+def test_parse_accepts_common_llm_null_strings_for_optional_fields() -> None:
+    content = json.dumps(
+        {
+            "action_type": "like_post",
+            "post_id": "post-1",
+            "target_user_id": "none",
+            "text": "",
+            "topic": "null",
+            "stance": "N/A",
+            "reason": "visible signal",
+        }
+    )
+
+    action = parse_social_action_content(content, tick=2, user_id=1)
+
+    assert action.action_type == "like_post"
+    assert action.post_id == "post-1"
+    assert action.target_user_id is None
+    assert action.text is None
+    assert action.topic is None
+    assert action.stance is None
+
+
+def test_parse_accepts_numeric_strings_for_optional_numeric_fields() -> None:
+    content = json.dumps(
+        {
+            "action_type": "send_dm",
+            "post_id": "post-1",
+            "target_user_id": "2",
+            "text": "Did you see this?",
+            "topic": "transit",
+            "stance": "0.25",
+            "reason": "private concern",
+        }
+    )
+
+    action = parse_social_action_content(content, tick=2, user_id=1)
+
+    assert action.target_user_id == 2
+    assert action.stance == 0.25
+
+
 def test_mock_policy_likes_high_engagement_feed_item() -> None:
     policy = MockSocialMediaPolicy(response_style="balanced")
     feed = (
@@ -284,7 +326,19 @@ def test_social_media_prompt_does_not_reveal_experiment() -> None:
     assert "instagram-like app" in prompt.lower()
     assert "80 likes" in prompt
     assert "@carlos" in prompt
+    assert "author_id=2" in prompt
     assert "The new bus lane finally makes sense." in prompt
+
+
+def test_social_media_prompt_requires_null_for_unused_optional_fields() -> None:
+    prompt = build_social_media_prompt(
+        profile=_profile(),
+        state=_state(),
+        feed=(),
+        recent_memories=(),
+    )
+
+    assert "Use null, not strings like \"none\" or \"N/A\"" in prompt
 
 
 def test_social_media_prompt_exposes_sponsored_ad_card_facts() -> None:
@@ -317,6 +371,7 @@ def test_social_media_prompt_exposes_sponsored_ad_card_facts() -> None:
     assert "label=sponsored" in prompt
     assert "campaign=maple_3rd_opening" in prompt
     assert "seen_before=2" in prompt
+    assert "author_id=0" in prompt
 
 
 def test_parse_create_post_action() -> None:

@@ -257,6 +257,26 @@ def test_instagram_social_lite_mock_experiment_exists_and_is_valid() -> None:
     assert config.experiment_name == "instagram_social_dynamics"
 
 
+def test_instagram_local_coffee_ad_reach_gpt54_mini_pilot_exists_and_is_valid() -> None:
+    from society_simulation.config import load_config
+    from society_simulation.social_media_config import InstagramSocialDynamicsConfig
+
+    config = load_config("experiments/instagram_local_coffee_ad_reach_gpt54_mini_pilot.json")
+
+    assert isinstance(config, InstagramSocialDynamicsConfig)
+    assert config.experiment_name == "instagram_social_dynamics"
+    assert config.num_users == 8
+    assert config.ticks == 8
+    assert config.update_policy["type"] == "llm"
+    assert config.update_policy["model"] == "gpt-5.4-mini"
+    assert config.update_policy["max_estimated_cost_usd"] == 0.2
+    assert len(config.ad_campaigns) == 1
+    campaign = config.ad_campaigns[0]
+    assert campaign.ad_condition == "sponsored_ad"
+    assert campaign.targeting == "interest_targeted"
+    assert campaign.creative_id == "social_proof_offer"
+
+
 def test_instagram_visible_endorsement_sweep_exists_and_materializes() -> None:
     from society_simulation.sweep_config import expand_sweep, load_sweep_config
 
